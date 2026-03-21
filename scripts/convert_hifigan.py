@@ -8,12 +8,14 @@ import numpy as np
 import torch
 import coremltools as ct
 
+PROJECT_ROOT = os.path.join(os.path.dirname(__file__), os.pardir)
+
 # HiFiGAN モジュールのインポートパスを通す
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "PronounSE", "HiFiGAN"))
+sys.path.insert(0, os.path.join(PROJECT_ROOT, "PronounSE", "HiFiGAN"))
 from models import Generator
 
-HIFIGAN_CHKPT_DIR = os.path.join(os.path.dirname(__file__), "PronounSE", "HiFiGAN", "chkpt")
-OUTPUT_PATH = "HiFiGAN_Generator.mlpackage"
+HIFIGAN_CHKPT_DIR = os.path.join(PROJECT_ROOT, "PronounSE", "HiFiGAN", "chkpt")
+OUTPUT_PATH = os.path.join(PROJECT_ROOT, "HiFiGAN_Generator.mlpackage")
 
 
 class AttrDict(dict):

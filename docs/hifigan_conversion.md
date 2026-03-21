@@ -69,11 +69,11 @@ CoreML の `mlprogram` バックエンドはデフォルトで **Float16 (半精
 
 | ファイル | 説明 |
 |---------|------|
-| `convert_hifigan.py` | 変換スクリプト |
+| `scripts/convert_hifigan.py` | 変換スクリプト |
 | `HiFiGAN_Generator.mlpackage` | 変換済み CoreML モデル (gitignore 対象) |
 
 ## 実行方法
 
 ```bash
-venv/bin/python convert_hifigan.py
+venv/bin/python scripts/convert_hifigan.py
 ```
