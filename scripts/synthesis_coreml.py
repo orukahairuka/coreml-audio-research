@@ -58,7 +58,10 @@ def synthesize(encoder, decoder, hifigan, mel_src, pos_src):
     2. Decoder: memory を参照しながら自己回帰ループで出力メルスペクトログラムを生成
     3. HiFi-GAN: メルスペクトログラム → 音声波形
     """
+    MAX_FRAMES = 1000  # CoreML 変換時の RangeDim 上限
     T_src = mel_src.shape[1]
+    if T_src > MAX_FRAMES:
+        raise ValueError(f"入力が {T_src} フレームあり、上限 {MAX_FRAMES} フレームを超えています")
 
     # 1. Encoder
     print("Encoder 実行中...")
@@ -79,10 +82,15 @@ def synthesize(encoder, decoder, hifigan, mel_src, pos_src):
             "pos": pos_trg,
         })
 
-        # Decoder の出力キーから mel_out を取得（最後のフレームを追加）
-        keys = sorted(dec_out.keys())
-        mel_pred = dec_out[keys[0]]       # mel_out [1, T_trg, 256]
-        postnet_pred = dec_out[keys[1]]   # postnet_out [1, T_trg, 256]
+        # Decoder の出力キーから mel_out / postnet_out を取得
+        if "mel_out" in dec_out:
+            mel_pred = dec_out["mel_out"]
+            postnet_pred = [v for k, v in dec_out.items() if k != "mel_out"][0]
+        else:
+            # 自動リネームされた場合は宣言順（挿入順）で取得
+            outputs = list(dec_out.values())
+            mel_pred = outputs[0]         # mel_out [1, T_trg, 256]
+            postnet_pred = outputs[1]     # postnet_out [1, T_trg, 256]
 
         last_frame = mel_pred[:, -1:, :]  # [1, 1, 256]
         mel_trg_input = np.concatenate([mel_trg_input, last_frame], axis=1)
