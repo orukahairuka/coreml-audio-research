@@ -11,16 +11,18 @@ import numpy as np
 import torch
 import coremltools as ct
 
+PROJECT_ROOT = os.path.join(os.path.dirname(__file__), os.pardir)
+
 # Transformer モジュールのインポートパスを通す
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "PronounSE", "Transformer"))
+sys.path.insert(0, os.path.join(PROJECT_ROOT, "PronounSE", "Transformer"))
 from network import Model
 import hyperparams as hp
 
 TRANSFORMER_CHKPT = os.path.join(
-    os.path.dirname(__file__), "PronounSE", "Transformer", "chkpt", "chkpt__20000.pth.tar"
+    PROJECT_ROOT, "PronounSE", "Transformer", "chkpt", "chkpt__20000.pth.tar"
 )
-ENCODER_OUTPUT_PATH = "Transformer_Encoder.mlpackage"
-DECODER_OUTPUT_PATH = "Transformer_Decoder.mlpackage"
+ENCODER_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "Transformer_Encoder.mlpackage")
+DECODER_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "Transformer_Decoder.mlpackage")
 
 
 class EncoderWrapper(torch.nn.Module):
