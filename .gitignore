@@ -1,2 +1,8 @@
 venv/
 *.mlpackage/
+result/
+.DS_Store
+
+# Xcode
+*.xcuserstate
+xcuserdata/
