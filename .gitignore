@@ -1,6 +1,7 @@
 venv/
 *.mlpackage/
-result/
+**/[Rr]esult/*
+!**/[Rr]esult/.gitkeep
 .DS_Store
 
 # Xcode
