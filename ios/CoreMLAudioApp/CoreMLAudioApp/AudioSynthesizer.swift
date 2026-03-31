@@ -1,15 +1,8 @@
 import CoreML
 import Accelerate
-import Observation
 
 /// CoreML モデル 3 つ (Encoder, Decoder, HiFi-GAN) を使って音声合成を行う
-@MainActor
-@Observable
 final class AudioSynthesizer {
-
-    var status: String = "待機中"
-    var isProcessing: Bool = false
-    var progress: Double = 0
 
     private var encoder: MLModel?
     private var decoder: MLModel?
@@ -18,8 +11,6 @@ final class AudioSynthesizer {
     /// CoreML モデルをロードする（ロード済みの場合はスキップ）
     func loadModels() throws {
         if encoder != nil { return }
-
-        status = "モデルをロード中..."
 
         guard let encoderURL = Bundle.main.url(forResource: "Transformer_Encoder", withExtension: "mlmodelc"),
               let decoderURL = Bundle.main.url(forResource: "Transformer_Decoder", withExtension: "mlmodelc"),
@@ -33,27 +24,25 @@ final class AudioSynthesizer {
         encoder = try MLModel(contentsOf: encoderURL, configuration: config)
         decoder = try MLModel(contentsOf: decoderURL, configuration: config)
         hifigan = try MLModel(contentsOf: hifiganURL, configuration: config)
-
-        status = "モデルロード完了"
     }
 
     /// 入力音声 URL から合成を実行し、出力波形を返す
-    func synthesize(inputURL: URL) async throws -> [Float] {
+    /// - Parameter onProgress: (statusMessage, progressFraction) を各ステップで呼ぶ
+    func synthesize(
+        inputURL: URL,
+        onProgress: @MainActor (String, Double) -> Void
+    ) async throws -> [Float] {
         guard let encoder, let decoder, let hifigan else {
             throw SynthesisError.modelNotLoaded
         }
 
-        isProcessing = true
-        progress = 0
-        defer { isProcessing = false }
-
         // 1. メルスペクトログラム抽出
-        status = "特徴量抽出中..."
+        await MainActor.run { onProgress("特徴量抽出中...", 0.0) }
         let (melData, frameCount) = try AudioFeatureExtractor.extractMelSpectrogram(from: inputURL)
         let nMels = AudioFeatureExtractor.nMels
 
         // 2. Encoder
-        status = "Encoder 実行中..."
+        await MainActor.run { onProgress("Encoder 実行中...", 0.05) }
         let melArray = try MLMultiArray(shape: [1, frameCount as NSNumber, nMels as NSNumber], dataType: .float32)
         for i in 0..<(frameCount * nMels) {
             melArray[i] = NSNumber(value: melData[i])
@@ -69,10 +58,13 @@ final class AudioSynthesizer {
             "pos": MLFeatureValue(multiArray: posArray)
         ])
         let encoderOutput = try await encoder.prediction(from: encoderInput)
-        let memory = encoderOutput.featureValue(for: encoderOutput.featureNames.first!)!.multiArrayValue!
+        guard let memoryFeature = encoderOutput.featureValue(for: encoderOutput.featureNames.first ?? ""),
+              let memory = memoryFeature.multiArrayValue else {
+            throw SynthesisError.decoderFailed
+        }
 
         // 3. Decoder (自己回帰ループ)
-        status = "Decoder 実行中... (0/\(frameCount))"
+        await MainActor.run { onProgress("Decoder 実行中... (0/\(frameCount))", 0.1) }
 
         // 初期入力: ゼロベクトル [1, 1, 256]
         var decoderInputData = [Float](repeating: 0, count: nMels)
@@ -112,8 +104,8 @@ final class AudioSynthesizer {
             }
             currentLength += 1
 
-            progress = Double(step + 1) / Double(frameCount)
-            status = "Decoder 実行中... (\(step + 1)/\(frameCount))"
+            let progressValue = 0.1 + 0.8 * Double(step + 1) / Double(frameCount)
+            await MainActor.run { onProgress("Decoder 実行中... (\(step + 1)/\(frameCount))", progressValue) }
 
             // UI 更新のために yield
             if step % 10 == 0 {
@@ -122,7 +114,7 @@ final class AudioSynthesizer {
         }
 
         // 4. HiFi-GAN
-        status = "HiFi-GAN 実行中..."
+        await MainActor.run { onProgress("HiFi-GAN 実行中...", 0.9) }
         guard let postnetOut = lastPostnetOut else { throw SynthesisError.decoderFailed }
 
         // postnet_out: [1, T, 256] → [1, 256, T] に転置
@@ -138,7 +130,10 @@ final class AudioSynthesizer {
             "mel": MLFeatureValue(multiArray: vocoderInput)
         ])
         let hifiganOutput = try await hifigan.prediction(from: hifiganInput)
-        let waveformArray = hifiganOutput.featureValue(for: hifiganOutput.featureNames.first!)!.multiArrayValue!
+        guard let waveformFeature = hifiganOutput.featureValue(for: hifiganOutput.featureNames.first ?? ""),
+              let waveformArray = waveformFeature.multiArrayValue else {
+            throw SynthesisError.decoderFailed
+        }
 
         // 波形を Float 配列に変換
         let sampleCount = waveformArray.count
@@ -148,14 +143,12 @@ final class AudioSynthesizer {
         }
 
         // 5. デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
-        status = "後処理中..."
+        await MainActor.run { onProgress("後処理中...", 0.95) }
         let coeff = AudioFeatureExtractor.preemphasisCoeff
         for i in 1..<waveform.count {
             waveform[i] = waveform[i] + coeff * waveform[i - 1]
         }
 
-        status = "合成完了"
-        progress = 1.0
         return waveform
     }
 

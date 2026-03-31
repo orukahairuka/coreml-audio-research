@@ -6,13 +6,9 @@
 //
 
 import SwiftUI
-import AVFoundation
 
 struct ContentView: View {
-    @State private var synthesizer = AudioSynthesizer()
-    @State private var audioPlayer: AVAudioPlayer?
-    @State private var errorMessage: String?
-    @State private var outputWaveform: [Float]?
+    @State private var viewModel = SynthesisViewModel()
 
     var body: some View {
         NavigationStack {
@@ -20,10 +16,10 @@ struct ContentView: View {
                 // ステータス表示
                 GroupBox("ステータス") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(synthesizer.status)
+                        Text(viewModel.status)
                             .font(.body)
-                        if synthesizer.isProcessing {
-                            ProgressView(value: synthesizer.progress)
+                        if viewModel.isProcessing {
+                            ProgressView(value: viewModel.progress)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -32,35 +28,35 @@ struct ContentView: View {
                 // アクションボタン
                 VStack(spacing: 12) {
                     Button {
-                        Task { await runSynthesis() }
+                        Task { await viewModel.runSynthesis() }
                     } label: {
                         Label("合成実行", systemImage: "waveform")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(synthesizer.isProcessing)
+                    .disabled(viewModel.isProcessing)
 
                     Button {
-                        playOutput()
+                        viewModel.playOutput()
                     } label: {
                         Label("再生", systemImage: "play.fill")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(outputWaveform == nil || synthesizer.isProcessing)
+                    .disabled(!viewModel.canPlay)
 
                     Button {
-                        stopPlayback()
+                        viewModel.stopPlayback()
                     } label: {
                         Label("停止", systemImage: "stop.fill")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(audioPlayer == nil || !(audioPlayer?.isPlaying ?? false))
+                    .disabled(!viewModel.isPlaying)
                 }
 
                 // エラー表示
-                if let errorMessage {
+                if let errorMessage = viewModel.errorMessage {
                     GroupBox {
                         Text(errorMessage)
                             .foregroundStyle(.red)
@@ -84,84 +80,6 @@ struct ContentView: View {
             .padding()
             .navigationTitle("CoreML Audio")
         }
-    }
-
-    private func runSynthesis() async {
-        errorMessage = nil
-        outputWaveform = nil
-
-        do {
-            try synthesizer.loadModels()
-
-            guard let inputURL = Bundle.main.url(forResource: "input_sample", withExtension: "wav") else {
-                errorMessage = "input_sample.wav がバンドルに見つかりません"
-                return
-            }
-
-            let waveform = try await synthesizer.synthesize(inputURL: inputURL)
-            outputWaveform = waveform
-            playOutput()
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    private func playOutput() {
-        guard let waveform = outputWaveform else { return }
-
-        // オーディオセッション設定
-        #if os(iOS)
-        do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-            try AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            errorMessage = "オーディオセッションエラー: \(error.localizedDescription)"
-            return
-        }
-        #endif
-
-        let sampleRate: Double = AudioFeatureExtractor.sampleRate
-        let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false)!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(waveform.count))!
-        buffer.frameLength = AVAudioFrameCount(waveform.count)
-
-        let channelData = buffer.floatChannelData![0]
-        for i in 0..<waveform.count {
-            channelData[i] = waveform[i]
-        }
-
-        // PCMBuffer → wav Data → AVAudioPlayer
-        do {
-            let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("output.wav")
-            try? FileManager.default.removeItem(at: tempURL)
-
-            // WAV ファイルとして書き出す (Int16 PCM)
-            let wavSettings: [String: Any] = [
-                AVFormatIDKey: Int(kAudioFormatLinearPCM),
-                AVSampleRateKey: sampleRate,
-                AVNumberOfChannelsKey: 1,
-                AVLinearPCMBitDepthKey: 16,
-                AVLinearPCMIsFloatKey: false,
-                AVLinearPCMIsBigEndianKey: false,
-            ]
-            // スコープで閉じて書き込みを確定させる
-            do {
-                let outputFile = try AVAudioFile(forWriting: tempURL, settings: wavSettings, commonFormat: .pcmFormatFloat32, interleaved: false)
-                try outputFile.write(from: buffer)
-            }
-
-            let player = try AVAudioPlayer(contentsOf: tempURL)
-            player.volume = 1.0
-            player.prepareToPlay()
-            player.play()
-            audioPlayer = player
-        } catch {
-            errorMessage = "再生エラー: \(error.localizedDescription)"
-        }
-    }
-
-    private func stopPlayback() {
-        audioPlayer?.stop()
     }
 }
 
