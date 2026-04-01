@@ -309,4 +309,42 @@ struct AudioFeatureExtractor {
             return min(1.0, max(1e-8, normalized))
         }
     }
+
+    // MARK: - Display Mel Spectrogram
+
+    /// 可視化用メルスペクトログラムを計算する (librosa.power_to_db 相当, -80〜0 dB)
+    static func melSpectrogramForDisplay(from url: URL) throws -> (mel: [Float], frameCount: Int) {
+        let samples = try loadAudio(from: url)
+        let preprocessed = preprocess(samples)
+        let emphasized = applyPreemphasis(preprocessed)
+        let magnitude = stft(emphasized)
+        let melSpec = applyMelFilterbank(magnitude)
+        return powerToDb(melSpec)
+    }
+
+    /// power → dB 変換 (librosa.power_to_db(S, ref=np.max) 相当)
+    /// 戻り値は -80〜0 dB レンジ
+    static func powerToDb(_ melResult: (mel: [Float], frameCount: Int)) -> (mel: [Float], frameCount: Int) {
+        let (mel, frameCount) = melResult
+        // ref = max(mel)
+        let refValue = mel.max() ?? 1e-10
+        let refLog = 10.0 * log10(max(1e-10, refValue))
+        let minDb: Float = -80.0
+        let result = mel.map { value in
+            let db = 10.0 * log10(max(1e-10, value)) - refLog
+            return max(minDb, db)
+        }
+        return (result, frameCount)
+    }
+
+    /// CoreML Decoder の出力メル (正規化済み [0〜1]) を可視化用 dB スケールに逆変換する
+    /// normalizeToDB の逆: db = normalized * maxDB + refDB - maxDB
+    /// → power_to_db 相当の -80〜0 レンジに変換
+    static func denormalizeToDisplayDb(_ normalized: [Float]) -> [Float] {
+        return normalized.map { value in
+            // normalizeToDB の逆変換: db = value * maxDB + refDB - maxDB
+            let db = value * maxDB + refDB - maxDB
+            return max(-80.0, min(0.0, db))
+        }
+    }
 }

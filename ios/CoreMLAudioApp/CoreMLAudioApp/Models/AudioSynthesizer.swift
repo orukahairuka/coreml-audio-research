@@ -26,19 +26,21 @@ final class AudioSynthesizer {
         hifigan = try MLModel(contentsOf: hifiganURL, configuration: config)
     }
 
-    /// 入力音声 URL から合成を実行し、出力波形を返す
+    /// 入力音声 URL から合成を実行し、SynthesisResult を返す
     /// - Parameter onProgress: (statusMessage, progressFraction) を各ステップで呼ぶ
     func synthesize(
         inputURL: URL,
         onProgress: @MainActor (String, Double) -> Void
-    ) async throws -> [Float] {
+    ) async throws -> SynthesisResult {
         guard let encoder, let decoder, let hifigan else {
             throw SynthesisError.modelNotLoaded
         }
 
         // 1. メルスペクトログラム抽出
         await MainActor.run { onProgress("特徴量抽出中...", 0.0) }
+        let inputWaveform = try AudioFeatureExtractor.loadAudio(from: inputURL)
         let (melData, frameCount) = try AudioFeatureExtractor.extractMelSpectrogram(from: inputURL)
+        let inputDisplayMel = try AudioFeatureExtractor.melSpectrogramForDisplay(from: inputURL)
         let nMels = AudioFeatureExtractor.nMels
 
         // 2. Encoder
@@ -149,7 +151,25 @@ final class AudioSynthesizer {
             waveform[i] = waveform[i] + coeff * waveform[i - 1]
         }
 
-        return waveform
+        // 6. 出力メルスペクトログラム (postnet_out を可視化用 dB に変換)
+        var outputMelNormalized = [Float](repeating: 0, count: totalFrames * nMels)
+        for t in 0..<totalFrames {
+            for m in 0..<nMels {
+                outputMelNormalized[t * nMels + m] = postnetOut[[0, t as NSNumber, m as NSNumber]].floatValue
+            }
+        }
+        let outputDisplayMel = AudioFeatureExtractor.denormalizeToDisplayDb(outputMelNormalized)
+
+        return SynthesisResult(
+            inputWaveform: inputWaveform,
+            outputWaveform: waveform,
+            inputMelSpectrogram: inputDisplayMel.mel,
+            outputMelSpectrogram: outputDisplayMel,
+            inputFrameCount: inputDisplayMel.frameCount,
+            outputFrameCount: totalFrames,
+            nMels: nMels,
+            sampleRate: AudioFeatureExtractor.sampleRate
+        )
     }
 
     enum SynthesisError: LocalizedError {

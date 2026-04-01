@@ -12,20 +12,21 @@ final class SynthesisViewModel {
     var progress: Double = 0
     var errorMessage: String?
 
-    var canPlay: Bool { outputWaveform != nil && !isProcessing }
+    var canPlay: Bool { synthesisResult != nil && !isProcessing }
     var isPlaying: Bool { audioPlayer.isPlaying }
+    var hasResult: Bool { synthesisResult != nil }
 
     // MARK: - Private
 
     private let synthesizer = AudioSynthesizer()
     private let audioPlayer = AudioPlayer()
-    private var outputWaveform: [Float]?
+    private(set) var synthesisResult: SynthesisResult?
 
     // MARK: - Actions
 
     func runSynthesis() async {
         errorMessage = nil
-        outputWaveform = nil
+        synthesisResult = nil
         isProcessing = true
         progress = 0
         defer { isProcessing = false }
@@ -39,13 +40,13 @@ final class SynthesisViewModel {
                 return
             }
 
-            let waveform = try await synthesizer.synthesize(inputURL: inputURL) {
-                [weak self] statusText, progressValue in
+            let result = try await synthesizer.synthesize(inputURL: inputURL) {
+                [weak self] (statusText: String, progressValue: Double) in
                 self?.status = statusText
                 self?.progress = progressValue
             }
 
-            outputWaveform = waveform
+            synthesisResult = result
             status = "合成完了"
             progress = 1.0
             playOutput()
@@ -56,7 +57,7 @@ final class SynthesisViewModel {
     }
 
     func playOutput() {
-        guard let waveform = outputWaveform else { return }
+        guard let waveform = synthesisResult?.outputWaveform else { return }
         do {
             try audioPlayer.play(waveform: waveform, sampleRate: AudioFeatureExtractor.sampleRate)
         } catch {
