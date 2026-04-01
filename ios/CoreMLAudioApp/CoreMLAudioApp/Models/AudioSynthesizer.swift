@@ -39,7 +39,9 @@ final class AudioSynthesizer {
         // 1. メルスペクトログラム抽出
         await MainActor.run { onProgress("特徴量抽出中...", 0.0) }
         let inputWaveform = try AudioFeatureExtractor.loadAudio(from: inputURL)
-        let (melData, frameCount) = try AudioFeatureExtractor.extractMelSpectrogram(from: inputURL)
+        let melResult = try AudioFeatureExtractor.extractMelSpectrogram(from: inputURL)
+        let melData = melResult.mel
+        let frameCount = melResult.frameCount
         let inputDisplayMel = try AudioFeatureExtractor.melSpectrogramForDisplay(from: inputURL)
         let nMels = AudioFeatureExtractor.nMels
 
