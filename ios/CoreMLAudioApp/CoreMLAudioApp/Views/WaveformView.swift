@@ -1,22 +1,22 @@
 import SwiftUI
 import Charts
 
-/// 波形を表示するビュー (min/max envelope でダウンサンプリング)
+/// 波形を表示するビュー (min/max envelope で AreaMark 描画)
 struct WaveformView: View {
     let waveform: [Float]
     let sampleRate: Double
     let label: String
 
-    /// ダウンサンプリングされた波形ポイント
-    private var envelopePoints: [EnvelopePoint] {
-        let maxPoints = 800
+    /// バケットごとの min/max を保持
+    private var envelopeBuckets: [EnvelopeBucket] {
+        let maxBuckets = 800
         let count = waveform.count
         guard count > 0 else { return [] }
 
-        let bucketSize = max(1, count / maxPoints)
+        let bucketSize = max(1, count / maxBuckets)
         let bucketCount = (count + bucketSize - 1) / bucketSize
-        var points = [EnvelopePoint]()
-        points.reserveCapacity(bucketCount * 2)
+        var buckets = [EnvelopeBucket]()
+        buckets.reserveCapacity(bucketCount)
 
         for i in 0..<bucketCount {
             let start = i * bucketSize
@@ -29,10 +29,13 @@ struct WaveformView: View {
                 if v > maxVal { maxVal = v }
             }
             let timeSec = Double(start + (end - start) / 2) / sampleRate
-            points.append(EnvelopePoint(time: timeSec, amplitude: Double(minVal)))
-            points.append(EnvelopePoint(time: timeSec, amplitude: Double(maxVal)))
+            buckets.append(EnvelopeBucket(
+                time: timeSec,
+                minAmplitude: Double(minVal),
+                maxAmplitude: Double(maxVal)
+            ))
         }
-        return points
+        return buckets
     }
 
     private var duration: Double {
@@ -45,24 +48,26 @@ struct WaveformView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Chart(envelopePoints) { point in
-                LineMark(
-                    x: .value("Time", point.time),
-                    y: .value("Amp", point.amplitude)
+            Chart(envelopeBuckets) { bucket in
+                AreaMark(
+                    x: .value("Time", bucket.time),
+                    yStart: .value("Min", bucket.minAmplitude),
+                    yEnd: .value("Max", bucket.maxAmplitude)
                 )
-                .foregroundStyle(.blue)
+                .foregroundStyle(.blue.opacity(0.7))
             }
             .chartYScale(domain: -1.0...1.0)
             .chartXScale(domain: 0...max(0.01, duration))
             .chartYAxisLabel("Amp")
             .chartXAxisLabel("sec")
-            .frame(height: 80)
+            .frame(height: 120)
         }
     }
 }
 
-private struct EnvelopePoint: Identifiable {
+private struct EnvelopeBucket: Identifiable {
     let id = UUID()
     let time: Double
-    let amplitude: Double
+    let minAmplitude: Double
+    let maxAmplitude: Double
 }
