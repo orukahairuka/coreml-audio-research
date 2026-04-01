@@ -55,6 +55,17 @@ struct ContentView: View {
                     .disabled(!viewModel.isPlaying)
                 }
 
+                // 解析結果
+                if let result = viewModel.synthesisResult {
+                    NavigationLink {
+                        AnalysisView(result: result)
+                    } label: {
+                        Label("解析結果を表示", systemImage: "chart.bar.xaxis")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+
                 // エラー表示
                 if let errorMessage = viewModel.errorMessage {
                     GroupBox {
