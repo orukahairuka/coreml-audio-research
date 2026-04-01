@@ -14,6 +14,16 @@ struct AudioFeatureExtractor {
     static let refDB: Float = 20
     static let preemphasisCoeff: Float = 0.97
 
+    // PronounSE/Transformer/utils.py の preprocess() デフォルト引数と一致させる
+    /// 音の開始を判定するエネルギーの閾値。窓内の二乗和がこの値を超えたら「音が始まった」とみなす
+    static let onsetThreshold: Float = 0.08
+    /// オンセット検出時に窓をずらす幅（サンプル数）
+    static let onsetShift = 256
+    /// オンセット検出時にエネルギーを測る窓の幅（サンプル数）
+    static let onsetWindowLength = 1024
+    /// フェードアウトする割合。末尾 15% の区間で音量を下げる
+    static let fadeOutRatio: Float = 0.15
+
     /// wav ファイルからメルスペクトログラムを抽出する
     /// - Returns: (mel: [T, nMels], frameCount: Int)
     static func extractMelSpectrogram(from url: URL) throws -> (mel: [Float], frameCount: Int) {
@@ -95,16 +105,11 @@ struct AudioFeatureExtractor {
 
     /// onset 検出 + fade out (PronounSE/Transformer/utils.py の preprocess と同等)
     static func preprocess(_ y: [Float]) -> [Float] {
-        let onsetThreshold: Float = 0.08
-        let shift = 256
-        let windowLength = 1024
-        let fadeOutRatio: Float = 0.15
-
         // onset 検出
         var onsetIndex = 0
         let sq = y.map { $0 * $0 }
-        for i in stride(from: 0, to: sq.count - windowLength, by: shift) {
-            let sum = sq[i..<(i + windowLength)].reduce(0, +)
+        for i in stride(from: 0, to: sq.count - onsetWindowLength, by: onsetShift) {
+            let sum = sq[i..<(i + onsetWindowLength)].reduce(0, +)
             if sum > onsetThreshold {
                 onsetIndex = i
                 break
