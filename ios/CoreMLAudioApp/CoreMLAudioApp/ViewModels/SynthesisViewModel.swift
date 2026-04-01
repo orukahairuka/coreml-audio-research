@@ -40,11 +40,13 @@ final class SynthesisViewModel {
                 return
             }
 
-            let result = try await synthesizer.synthesize(inputURL: inputURL) {
-                [weak self] (statusText: String, progressValue: Double) in
-                self?.status = statusText
-                self?.progress = progressValue
-            }
+            let result = try await synthesizer.synthesize(
+                inputURL: inputURL,
+                onProgress: { [weak self] (statusText: String, progressValue: Double) in
+                    self?.status = statusText
+                    self?.progress = progressValue
+                }
+            )
 
             synthesisResult = result
             status = "合成完了"
