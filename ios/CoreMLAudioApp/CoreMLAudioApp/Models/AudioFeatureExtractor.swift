@@ -105,7 +105,7 @@ struct AudioFeatureExtractor {
 
     /// onset 検出 + fade out (PronounSE/Transformer/utils.py の preprocess と同等)
     static func preprocess(_ y: [Float]) -> [Float] {
-        // onset 検出
+        // onset 検出, 音がはじまる位置を見つける
         var onsetIndex = 0
         let sq = y.map { $0 * $0 }
         for i in stride(from: 0, to: sq.count - onsetWindowLength, by: onsetShift) {
@@ -147,58 +147,61 @@ struct AudioFeatureExtractor {
     /// STFT を実行し magnitude spectrogram を返す
     /// - Returns: [T, 1 + nFFT/2] の magnitude (行優先)
     static func stft(_ signal: [Float]) -> (magnitudes: [Float], frameCount: Int) {
-        let fftSize = nFFT
-        let halfFFT = fftSize / 2
-        let binCount = halfFFT + 1
+        let fftSize = nFFT           // FFT のサイズ（1024）
+        let halfFFT = fftSize / 2    // FFT の半分（512）
+        let binCount = halfFFT + 1   // 周波数ビンの数（513）。FFT 結果は対称なので半分+1 で十分
 
-        // Hann window
+        // Hann 窓: 切り出し区間の端を滑らかにゼロに落とし、ブツ切れによるノイズを防ぐ
         var window = [Float](repeating: 0, count: fftSize)
         vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
 
-        // パディング
+        // 信号が FFT サイズより短い場合、末尾をゼロで埋める
         let padded = signal + [Float](repeating: 0, count: max(0, fftSize - signal.count))
 
+        // hopLength ずつずらして何フレーム分析できるか
         let frameCount = max(0, (padded.count - fftSize) / hopLength) + 1
 
-        // FFT セットアップ
+        // Accelerate の FFT エンジンを準備
         let log2n = vDSP_Length(log2(Float(fftSize)))
         guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(kFFTRadix2)) else {
             return ([], 0)
         }
-        defer { vDSP_destroy_fftsetup(fftSetup) }
+        defer { vDSP_destroy_fftsetup(fftSetup) }  // 関数終了時に解放
 
-        var magnitudes = [Float](repeating: 0, count: frameCount * binCount)
-        var windowedFrame = [Float](repeating: 0, count: fftSize)
-        var realPart = [Float](repeating: 0, count: halfFFT)
-        var imagPart = [Float](repeating: 0, count: halfFFT)
+        var magnitudes = [Float](repeating: 0, count: frameCount * binCount)  // 全フレームの振幅スペクトル
+        var windowedFrame = [Float](repeating: 0, count: fftSize)  // 窓関数適用済みの1フレーム分
+        var realPart = [Float](repeating: 0, count: halfFFT)  // FFT 結果の実数部
+        var imagPart = [Float](repeating: 0, count: halfFFT)  // FFT 結果の虚数部
 
         for frame in 0..<frameCount {
-            let start = frame * hopLength
+            let start = frame * hopLength  // このフレームの開始位置
             let end = min(start + fftSize, padded.count)
-            let available = end - start
+            let available = end - start    // 実際に使えるサンプル数
 
-            // 窓関数適用
+            // 窓関数を掛けて切り出し。足りない部分はゼロ
             for i in 0..<fftSize {
                 windowedFrame[i] = i < available ? padded[start + i] * window[i] : 0
             }
 
-            // FFT
+            // Accelerate の FFT を実行（ポインタ操作が必要）
             windowedFrame.withUnsafeMutableBufferPointer { bufPtr in
                 realPart.withUnsafeMutableBufferPointer { realPtr in
                     imagPart.withUnsafeMutableBufferPointer { imagPtr in
+                        // 実数部と虚数部を分離した形式に変換
                         var splitComplex = DSPSplitComplex(realp: realPtr.baseAddress!, imagp: imagPtr.baseAddress!)
                         bufPtr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfFFT) { complexPtr in
                             vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfFFT))
                         }
+                        // FFT 実行
                         vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
 
-                        // magnitude 計算
+                        // magnitude（振幅）計算
                         let offset = frame * binCount
-                        // DC 成分
+                        // DC 成分（0Hz、信号の平均値に相当）
                         magnitudes[offset] = abs(splitComplex.realp[0]) / Float(fftSize)
-                        // Nyquist 成分
+                        // Nyquist 成分（サンプルレートの半分の周波数）
                         magnitudes[offset + halfFFT] = abs(splitComplex.imagp[0]) / Float(fftSize)
-                        // その他の周波数
+                        // その他の周波数。2.0 は実数信号の対称性による補正係数
                         for i in 1..<halfFFT {
                             let re = splitComplex.realp[i]
                             let im = splitComplex.imagp[i]
