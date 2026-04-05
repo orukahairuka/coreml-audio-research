@@ -1,5 +1,9 @@
 /// 合成パイプラインの入出力データを保持する
 struct SynthesisResult {
+    /// 合成時の精度設定
+    let precision: ModelPrecision
+    /// 合成時の compute unit 設定
+    let computeUnit: ComputeUnitOption
     /// 入力音声の生波形 (22050 Hz)
     let inputWaveform: [Float]
     /// 合成後の波形 (デエンファシス適用済み)

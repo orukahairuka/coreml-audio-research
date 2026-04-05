@@ -89,6 +89,8 @@ final class AudioSynthesizer {
     /// - Parameter onProgress: (statusMessage, progressFraction) を各ステップで呼ぶ
     func synthesize(
         inputURL: URL,
+        precision: ModelPrecision,
+        computeUnit: ComputeUnitOption,
         onProgress: @MainActor (String, Double) -> Void
     ) async throws -> SynthesisResult {
         guard let encoder, let decoder, let hifigan else {
@@ -252,6 +254,8 @@ final class AudioSynthesizer {
         let outputDisplayMel = AudioFeatureExtractor.denormalizeToDisplayDb(outputMelNormalized)
 
         return SynthesisResult(
+            precision: precision,
+            computeUnit: computeUnit,
             inputWaveform: inputWaveform,
             outputWaveform: waveform,
             inputMelSpectrogram: inputDisplayMel.mel,

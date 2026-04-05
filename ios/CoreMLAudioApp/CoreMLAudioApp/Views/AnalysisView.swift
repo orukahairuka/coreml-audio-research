@@ -7,6 +7,16 @@ struct AnalysisView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                // 実行条件
+                GroupBox("実行条件") {
+                    HStack {
+                        Label(result.precision.rawValue, systemImage: "number")
+                        Spacer()
+                        Label(result.computeUnit.displayName, systemImage: "cpu")
+                    }
+                    .font(.headline)
+                }
+
                 // 入力セクション
                 GroupBox("Input") {
                     VStack(spacing: 12) {
