@@ -41,9 +41,14 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
             channelData[i] = waveform[i]
         }
 
-        // WAV ファイルとして書き出す (Int16 PCM)
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("output.wav")
-        try? FileManager.default.removeItem(at: tempURL)
+        // WAV ファイルとして Result/ に書き出す (Int16 PCM)
+        let resultDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Result", isDirectory: true)
+        if !FileManager.default.fileExists(atPath: resultDir.path) {
+            try FileManager.default.createDirectory(at: resultDir, withIntermediateDirectories: true)
+        }
+        let outputURL = resultDir.appendingPathComponent("output.wav")
+        try? FileManager.default.removeItem(at: outputURL)
 
         let wavSettings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
@@ -56,7 +61,7 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         // do スコープで outputFile を閉じてから AVAudioPlayer で読み込む
         do {
             let outputFile = try AVAudioFile(
-                forWriting: tempURL,
+                forWriting: outputURL,
                 settings: wavSettings,
                 commonFormat: .pcmFormatFloat32,
                 interleaved: false
@@ -64,7 +69,7 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
             try outputFile.write(from: buffer)
         }
 
-        let newPlayer = try AVAudioPlayer(contentsOf: tempURL)
+        let newPlayer = try AVAudioPlayer(contentsOf: outputURL)
         newPlayer.delegate = self
         newPlayer.volume = 1.0
         newPlayer.prepareToPlay()
