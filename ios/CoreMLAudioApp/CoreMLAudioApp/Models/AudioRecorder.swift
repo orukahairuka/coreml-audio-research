@@ -17,6 +17,8 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
     // MARK: - Recording
 
     func startRecording() throws {
+        guard !isRecording else { return }
+
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .default)
         try session.setActive(true)
@@ -55,6 +57,10 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         timer?.invalidate()
         timer = nil
         isRecording = false
+
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .default)
+        try? session.setActive(true)
 
         if flag {
             onRecordingFinished?(recorder.url)
