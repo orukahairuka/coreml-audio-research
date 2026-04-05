@@ -136,11 +136,11 @@ if __name__ == "__main__":
         choices=["float16", "float32", "int8"],
         default="float16",
     )
-    parser.add_argument("input", nargs="?")
+    parser.add_argument("input_file", nargs="?")
     args = parser.parse_args()
 
     default_input = os.path.join(PROJECT_ROOT, "PronounSE", "input_sample.wav")
-    file_path = args.input if args.input else default_input
+    file_path = args.input_file if args.input_file else default_input
     if not os.path.isfile(file_path):
         print(f"エラー: ファイルが見つかりません: {file_path}")
         sys.exit(1)
