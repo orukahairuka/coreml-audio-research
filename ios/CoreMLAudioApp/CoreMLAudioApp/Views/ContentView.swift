@@ -56,7 +56,7 @@ struct ContentView: View {
                                 }
                             )
                             .foregroundStyle(viewModel.audioSource == .recording(url) ? .primary : .secondary)
-                            .swipeActions(edge: .trailing) {
+                            .contextMenu {
                                 Button(role: .destructive, action: { viewModel.deleteRecording(at: url) }) {
                                     Label("削除", systemImage: "trash")
                                 }
