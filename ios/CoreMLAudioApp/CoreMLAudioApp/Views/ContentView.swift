@@ -36,7 +36,7 @@ struct ContentView: View {
 
                 // 計算デバイス選択
                 Picker("計算デバイス", selection: $viewModel.selectedComputeUnit) {
-                    ForEach(ComputeUnitOption.allCases, id: \.self) { option in
+                    ForEach(ComputeUnitOption.allCases) { option in
                         Text(option.displayName).tag(option)
                     }
                 }

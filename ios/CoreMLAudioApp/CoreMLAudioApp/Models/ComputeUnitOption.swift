@@ -1,10 +1,12 @@
 import CoreML
 
-enum ComputeUnitOption: String, CaseIterable {
+enum ComputeUnitOption: String, CaseIterable, Identifiable {
     case all       = "all"
     case cpuAndGPU = "cpuAndGPU"
     case cpuAndNE  = "cpuAndNE"
     case cpuOnly   = "cpuOnly"
+
+    var id: String { rawValue }
 
     var displayName: String {
         switch self {
