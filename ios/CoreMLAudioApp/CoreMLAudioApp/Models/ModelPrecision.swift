@@ -7,11 +7,5 @@ enum ModelPrecision: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     /// Bundle 内のモデル名サフィックス
-    var suffix: String {
-        switch self {
-        case .float32: return "float32"
-        case .float16: return "float16"
-        case .int8: return "int8"
-        }
-    }
+    var suffix: String { rawValue.lowercased() }
 }
