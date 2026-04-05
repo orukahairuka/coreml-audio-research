@@ -10,6 +10,50 @@ final class AudioSynthesizer {
     private var loadedPrecision: ModelPrecision?
     private var loadedComputeUnits: MLComputeUnits?
 
+    // MARK: - Debug Helpers
+
+    /// MLMultiArray の統計情報を計算する
+    private func computeStats(of array: MLMultiArray) -> ArrayStats {
+        let count = array.count
+        var minVal: Float = .infinity
+        var maxVal: Float = -.infinity
+        var sum: Float = 0
+        var hasNaN = false
+        var hasInf = false
+        for i in 0..<count {
+            let v = array[i].floatValue
+            if v.isNaN { hasNaN = true }
+            if v.isInfinite { hasInf = true }
+            if v < minVal { minVal = v }
+            if v > maxVal { maxVal = v }
+            sum += v
+        }
+        return ArrayStats(
+            min: minVal, max: maxVal, mean: sum / Float(count),
+            hasNaN: hasNaN, hasInf: hasInf
+        )
+    }
+
+    /// Float 配列の統計情報を計算する
+    private func computeStats(of array: [Float]) -> ArrayStats {
+        var minVal: Float = .infinity
+        var maxVal: Float = -.infinity
+        var sum: Float = 0
+        var hasNaN = false
+        var hasInf = false
+        for v in array {
+            if v.isNaN { hasNaN = true }
+            if v.isInfinite { hasInf = true }
+            if v < minVal { minVal = v }
+            if v > maxVal { maxVal = v }
+            sum += v
+        }
+        return ArrayStats(
+            min: minVal, max: maxVal, mean: sum / Float(array.count),
+            hasNaN: hasNaN, hasInf: hasInf
+        )
+    }
+
     /// 指定精度・計算デバイスで CoreML モデルをロードする（同じ設定でロード済みならスキップ）
     func loadModels(precision: ModelPrecision, computeUnits: MLComputeUnits) throws {
         if loadedPrecision == precision && loadedComputeUnits == computeUnits
@@ -81,6 +125,7 @@ final class AudioSynthesizer {
               let memory = memoryFeature.multiArrayValue else {
             throw SynthesisError.decoderFailed
         }
+        let encoderStats = computeStats(of: memory)
 
         // 3. Decoder (自己回帰ループ)
         await MainActor.run { onProgress("Decoder 実行中... (0/\(frameCount))", 0.1) }
@@ -90,6 +135,7 @@ final class AudioSynthesizer {
         var currentLength = 1
         var lastMelOut: MLMultiArray?
         var lastPostnetOut: MLMultiArray?
+        var decoderStepStats = [DecoderStepStats]()
 
         for step in 0..<frameCount {
             // decoder_input: [1, currentLength, 256]
@@ -118,6 +164,22 @@ final class AudioSynthesizer {
 
             // 最後のフレームを取得して入力に追加
             guard let melOut = lastMelOut else { throw SynthesisError.decoderFailed }
+
+            // デバッグ: 先頭・中間・末尾の5ステップずつ + NaN/Inf 検出時は全ステップ記録
+            let melStats = computeStats(of: melOut)
+            let postStats = lastPostnetOut.map { computeStats(of: $0) }
+                ?? ArrayStats(min: 0, max: 0, mean: 0, hasNaN: false, hasInf: false)
+            let shouldRecord = step < 5
+                || step >= frameCount - 5
+                || (frameCount > 10 && step >= frameCount / 2 - 2 && step <= frameCount / 2 + 2)
+                || melStats.hasNaN || melStats.hasInf
+                || postStats.hasNaN || postStats.hasInf
+            if shouldRecord {
+                decoderStepStats.append(DecoderStepStats(
+                    step: step, melOut: melStats, postnetOut: postStats
+                ))
+            }
+
             for i in 0..<nMels {
                 decoderInputData.append(melOut[[0, (currentLength - 1) as NSNumber, i as NSNumber]].floatValue)
             }
@@ -145,14 +207,17 @@ final class AudioSynthesizer {
             }
         }
 
-        let hifiganInput = try MLDictionaryFeatureProvider(dictionary: [
+        let hifiganInputStats = computeStats(of: vocoderInput)
+
+        let hifiganInputProvider = try MLDictionaryFeatureProvider(dictionary: [
             "mel": MLFeatureValue(multiArray: vocoderInput)
         ])
-        let hifiganOutput = try await hifigan.prediction(from: hifiganInput)
+        let hifiganOutput = try await hifigan.prediction(from: hifiganInputProvider)
         guard let waveformFeature = hifiganOutput.featureValue(for: hifiganOutput.featureNames.first ?? ""),
               let waveformArray = waveformFeature.multiArrayValue else {
             throw SynthesisError.decoderFailed
         }
+        let hifiganOutputStats = computeStats(of: waveformArray)
 
         // 波形を Float 配列に変換
         let sampleCount = waveformArray.count
@@ -160,10 +225,22 @@ final class AudioSynthesizer {
         for i in 0..<sampleCount {
             waveform[i] = waveformArray[i].floatValue
         }
+        let waveformBeforeDeemphasis = computeStats(of: waveform)
 
         // 5. デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
         await MainActor.run { onProgress("後処理中...", 0.95) }
         waveform = AudioFeatureExtractor.applyDeemphasis(waveform)
+        let waveformAfterDeemphasis = computeStats(of: waveform)
+
+        // デバッグ情報をまとめる
+        let debugInfo = PipelineDebugInfo(
+            encoderOutput: encoderStats,
+            decoderSteps: decoderStepStats,
+            hifiganInput: hifiganInputStats,
+            hifiganOutput: hifiganOutputStats,
+            waveformBeforeDeemphasis: waveformBeforeDeemphasis,
+            waveformAfterDeemphasis: waveformAfterDeemphasis
+        )
 
         // 6. 出力メルスペクトログラム (postnet_out を可視化用 dB に変換)
         var outputMelNormalized = [Float](repeating: 0, count: totalFrames * nMels)
@@ -182,7 +259,8 @@ final class AudioSynthesizer {
             inputFrameCount: inputDisplayMel.frameCount,
             outputFrameCount: totalFrames,
             nMels: nMels,
-            sampleRate: AudioFeatureExtractor.sampleRate
+            sampleRate: AudioFeatureExtractor.sampleRate,
+            debugInfo: debugInfo
         )
     }
 

@@ -12,4 +12,6 @@ struct SynthesisResult {
     let outputFrameCount: Int
     let nMels: Int
     let sampleRate: Double
+    /// パイプライン各ステップのデバッグ統計情報
+    let debugInfo: PipelineDebugInfo
 }

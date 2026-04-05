@@ -44,6 +44,9 @@ struct AnalysisView: View {
                         )
                     }
                 }
+
+                // デバッグセクション
+                DebugStatsView(debugInfo: result.debugInfo)
             }
             .padding()
         }
