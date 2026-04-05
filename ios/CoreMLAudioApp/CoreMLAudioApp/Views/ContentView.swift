@@ -25,6 +25,23 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
+                // 精度選択
+                Picker("精度", selection: $viewModel.selectedPrecision) {
+                    ForEach(ModelPrecision.allCases) { precision in
+                        Text(precision.rawValue).tag(precision)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(viewModel.isProcessing)
+
+                // 計算デバイス選択
+                Picker("計算デバイス", selection: $viewModel.selectedComputeUnit) {
+                    ForEach(ComputeUnitOption.allCases) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .disabled(viewModel.isProcessing)
+
                 // アクションボタン
                 VStack(spacing: 12) {
                     Button(
@@ -74,7 +91,8 @@ struct ContentView: View {
                 // 情報
                 GroupBox("情報") {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("モデル: PronounSE (Float16)")
+                        Text("モデル: PronounSE (\(viewModel.selectedPrecision.rawValue))")
+                        Text("計算デバイス: \(viewModel.selectedComputeUnit.displayName)")
                         Text("サンプルレート: 22050 Hz")
                         Text("入力: input_sample.wav (バンドル)")
                     }

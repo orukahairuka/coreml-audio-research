@@ -7,4 +7,6 @@ $ARGUMENTS で精度を指定できます（float16 / float32 / int8）。未指
 1. `PronounSE/venv/bin/python scripts/convert_transformer.py --precision <精度>` — Encoder と Decoder を変換
 2. `PronounSE/venv/bin/python scripts/convert_hifigan.py --precision <精度>` — HiFi-GAN Generator を変換
 
+出力ファイル名には精度サフィックスが付きます（例: `Transformer_Encoder_float16.mlpackage`）。
+
 実行後、プロジェクトルートに生成された `.mlpackage` ファイルを一覧表示してください。

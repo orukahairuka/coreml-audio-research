@@ -7,19 +7,28 @@ final class AudioSynthesizer {
     private var encoder: MLModel?
     private var decoder: MLModel?
     private var hifigan: MLModel?
+    private var loadedPrecision: ModelPrecision?
+    private var loadedComputeUnits: MLComputeUnits?
 
-    /// CoreML モデルをロードする（ロード済みの場合はスキップ）
-    func loadModels() throws {
-        if encoder != nil && decoder != nil && hifigan != nil { return }
+    /// 指定精度・計算デバイスで CoreML モデルをロードする（同じ設定でロード済みならスキップ）
+    func loadModels(precision: ModelPrecision, computeUnits: MLComputeUnits) throws {
+        if loadedPrecision == precision && loadedComputeUnits == computeUnits
+            && encoder != nil && decoder != nil && hifigan != nil {
+            return
+        }
 
-        guard let encoderURL = Bundle.main.url(forResource: "Transformer_Encoder", withExtension: "mlmodelc"),
-              let decoderURL = Bundle.main.url(forResource: "Transformer_Decoder", withExtension: "mlmodelc"),
-              let hifiganURL = Bundle.main.url(forResource: "HiFiGAN_Generator", withExtension: "mlmodelc") else {
-            throw SynthesisError.modelNotFound
+        let encoderName = "Transformer_Encoder_\(precision.suffix)"
+        let decoderName = "Transformer_Decoder_\(precision.suffix)"
+        let hifiganName = "HiFiGAN_Generator_\(precision.suffix)"
+
+        guard let encoderURL = Bundle.main.url(forResource: encoderName, withExtension: "mlmodelc"),
+              let decoderURL = Bundle.main.url(forResource: decoderName, withExtension: "mlmodelc"),
+              let hifiganURL = Bundle.main.url(forResource: hifiganName, withExtension: "mlmodelc") else {
+            throw SynthesisError.modelNotFound(precision: precision.rawValue)
         }
 
         let config = MLModelConfiguration()
-        config.computeUnits = .cpuAndGPU
+        config.computeUnits = computeUnits
 
         let enc = try MLModel(contentsOf: encoderURL, configuration: config)
         let dec = try MLModel(contentsOf: decoderURL, configuration: config)
@@ -28,6 +37,8 @@ final class AudioSynthesizer {
         encoder = enc
         decoder = dec
         hifigan = hifi
+        loadedPrecision = precision
+        loadedComputeUnits = computeUnits
     }
 
     /// 入力音声 URL から合成を実行し、SynthesisResult を返す
@@ -176,13 +187,14 @@ final class AudioSynthesizer {
     }
 
     enum SynthesisError: LocalizedError {
-        case modelNotFound
+        case modelNotFound(precision: String)
         case modelNotLoaded
         case decoderFailed
 
         var errorDescription: String? {
             switch self {
-            case .modelNotFound: return "CoreML モデルが見つかりません。.mlpackage をプロジェクトに追加してください。"
+            case .modelNotFound(let precision):
+                return "\(precision) の CoreML モデルが見つかりません。.mlpackage をプロジェクトに追加してください。"
             case .modelNotLoaded: return "モデルがロードされていません。"
             case .decoderFailed: return "Decoder の出力を取得できませんでした。"
             }

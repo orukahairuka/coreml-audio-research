@@ -11,6 +11,8 @@ final class SynthesisViewModel {
     var isProcessing: Bool = false
     var progress: Double = 0
     var errorMessage: String?
+    var selectedPrecision: ModelPrecision = .float16
+    var selectedComputeUnit: ComputeUnitOption = .cpuAndGPU
 
     var canPlay: Bool { synthesisResult != nil && !isProcessing }
     private(set) var isPlaying: Bool = false
@@ -40,8 +42,11 @@ final class SynthesisViewModel {
         defer { isProcessing = false }
 
         do {
-            try synthesizer.loadModels()
-            status = "モデルロード完了"
+            try synthesizer.loadModels(
+                precision: selectedPrecision,
+                computeUnits: selectedComputeUnit.mlComputeUnits
+            )
+            status = "モデルロード完了 (\(selectedPrecision.rawValue), \(selectedComputeUnit.displayName))"
 
             guard let inputURL = Bundle.main.url(forResource: "input_sample", withExtension: "wav") else {
                 errorMessage = "input_sample.wav がバンドルに見つかりません"
