@@ -25,6 +25,74 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
+                // 入力ソース選択
+                GroupBox("入力音声") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        // サンプル音声
+                        Button(
+                            action: { viewModel.audioSource = .bundledSample },
+                            label: {
+                                HStack {
+                                    Image(systemName: viewModel.audioSource == .bundledSample ? "checkmark.circle.fill" : "circle")
+                                    Text("サンプル音声")
+                                    Spacer()
+                                }
+                            }
+                        )
+                        .foregroundStyle(viewModel.audioSource == .bundledSample ? .primary : .secondary)
+
+                        // 録音ファイル一覧
+                        ForEach(viewModel.recordings, id: \.absoluteString) { url in
+                            Button(
+                                action: { viewModel.audioSource = .recording(url) },
+                                label: {
+                                    HStack {
+                                        let isSelected = viewModel.audioSource == .recording(url)
+                                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                                        Text(url.deletingPathExtension().lastPathComponent)
+                                            .lineLimit(1)
+                                        Spacer()
+                                    }
+                                }
+                            )
+                            .foregroundStyle(viewModel.audioSource == .recording(url) ? .primary : .secondary)
+                            .contextMenu {
+                                Button(role: .destructive, action: { viewModel.deleteRecording(at: url) }) {
+                                    Label("削除", systemImage: "trash")
+                                }
+                            }
+                        }
+
+                        // 録音ボタン
+                        if viewModel.isRecording {
+                            HStack {
+                                Button(
+                                    action: { viewModel.stopRecording() },
+                                    label: {
+                                        Label("停止", systemImage: "stop.circle.fill")
+                                            .foregroundStyle(.red)
+                                    }
+                                )
+                                Spacer()
+                                Text(String(format: "%.1f / %.0f 秒", viewModel.recordingTime, viewModel.maxRecordingDuration))
+                                    .font(.caption)
+                                    .monospacedDigit()
+                            }
+                        } else {
+                            Button(
+                                action: { viewModel.startRecording() },
+                                label: {
+                                    Label("録音", systemImage: "mic.fill")
+                                        .frame(maxWidth: .infinity)
+                                }
+                            )
+                            .buttonStyle(.bordered)
+                            .tint(.red)
+                            .disabled(viewModel.isProcessing)
+                        }
+                    }
+                }
+
                 // 精度選択
                 Picker("精度", selection: $viewModel.selectedPrecision) {
                     ForEach(ModelPrecision.allCases) { precision in
@@ -52,7 +120,7 @@ struct ContentView: View {
                         }
                     )
                     .buttonStyle(.borderedProminent)
-                    .disabled(viewModel.isProcessing)
+                    .disabled(viewModel.isProcessing || viewModel.isRecording)
 
                     Button(
                         action: { viewModel.playOutput() },
@@ -94,7 +162,7 @@ struct ContentView: View {
                         Text("モデル: PronounSE (\(viewModel.selectedPrecision.rawValue))")
                         Text("計算デバイス: \(viewModel.selectedComputeUnit.displayName)")
                         Text("サンプルレート: 22050 Hz")
-                        Text("入力: input_sample.wav (バンドル)")
+                        Text("入力: \(viewModel.audioSource.displayName)")
                     }
                     .font(.caption)
                     .frame(maxWidth: .infinity, alignment: .leading)
