@@ -46,16 +46,6 @@ struct ContentView: View {
                     )
                     .buttonStyle(.bordered)
                     .disabled(!viewModel.canPlay)
-
-                    Button(
-                        action: { viewModel.stopPlayback() },
-                        label: {
-                            Label("停止", systemImage: "stop.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                    )
-                    .buttonStyle(.bordered)
-                    .disabled(!viewModel.isPlaying)
                 }
 
                 // 解析結果

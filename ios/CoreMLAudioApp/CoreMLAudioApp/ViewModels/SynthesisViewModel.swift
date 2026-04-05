@@ -76,8 +76,4 @@ final class SynthesisViewModel {
         }
     }
 
-    func stopPlayback() {
-        audioPlayer.stop()
-        isPlaying = false
-    }
 }
