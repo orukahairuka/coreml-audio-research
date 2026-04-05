@@ -21,6 +21,7 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, "PronounSE", "HiFiGAN"))
 from models import Generator
 
 HIFIGAN_CHKPT_DIR = os.path.join(PROJECT_ROOT, "PronounSE", "HiFiGAN", "chkpt")
+
 def get_output_path(precision):
     return os.path.join(PROJECT_ROOT, f"HiFiGAN_Generator_{precision}.mlpackage")
 

@@ -27,6 +27,7 @@ import hyperparams as hp
 TRANSFORMER_CHKPT = os.path.join(
     PROJECT_ROOT, "PronounSE", "Transformer", "chkpt", "chkpt__20000.pth.tar"
 )
+
 def get_output_path(model_name, precision):
     return os.path.join(PROJECT_ROOT, f"{model_name}_{precision}.mlpackage")
 
