@@ -1,0 +1,104 @@
+import AVFoundation
+
+/// マイクからの音声録音を管理する
+final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
+
+    /// 録音の最大時間（秒）。CoreML モデルの入力上限 1000 フレーム ≒ 11.6 秒に対応
+    static let maxDuration: TimeInterval = 11.0
+
+    private var recorder: AVAudioRecorder?
+    private var timer: Timer?
+
+    var onRecordingFinished: ((URL) -> Void)?
+    var onTimeUpdate: ((TimeInterval) -> Void)?
+
+    private(set) var isRecording = false
+
+    // MARK: - Recording
+
+    func startRecording() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.record, mode: .default)
+        try session.setActive(true)
+
+        let url = Self.newRecordingURL()
+        try Self.ensureRecordingsDirectory()
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatLinearPCM),
+            AVSampleRateKey: AudioFeatureExtractor.sampleRate,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 16,
+            AVLinearPCMIsFloatKey: false,
+            AVLinearPCMIsBigEndianKey: false,
+        ]
+
+        let newRecorder = try AVAudioRecorder(url: url, settings: settings)
+        newRecorder.delegate = self
+        newRecorder.prepareToRecord()
+        newRecorder.record(forDuration: Self.maxDuration)
+
+        recorder = newRecorder
+        isRecording = true
+
+        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true, block: { [weak self] _ in
+            guard let self, let recorder = self.recorder else { return }
+            self.onTimeUpdate?(recorder.currentTime)
+        })
+    }
+
+    func stopRecording() {
+        recorder?.stop()
+    }
+
+    func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
+        timer?.invalidate()
+        timer = nil
+        isRecording = false
+
+        if flag {
+            onRecordingFinished?(recorder.url)
+        }
+    }
+
+    // MARK: - File Management
+
+    static var recordingsDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Recordings", isDirectory: true)
+    }
+
+    static func ensureRecordingsDirectory() throws {
+        let dir = recordingsDirectory
+        if !FileManager.default.fileExists(atPath: dir.path) {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+    }
+
+    static func recordings() -> [URL] {
+        let dir = recordingsDirectory
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: dir,
+            includingPropertiesForKeys: [.creationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+        return files
+            .filter { $0.pathExtension == "wav" }
+            .sorted(by: { ($0.lastPathComponent) > ($1.lastPathComponent) })
+    }
+
+    static func deleteRecording(at url: URL) throws {
+        try FileManager.default.removeItem(at: url)
+    }
+
+    // MARK: - Private
+
+    private static func newRecordingURL() -> URL {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let name = "recording_\(formatter.string(from: Date())).wav"
+        return recordingsDirectory.appendingPathComponent(name)
+    }
+}
