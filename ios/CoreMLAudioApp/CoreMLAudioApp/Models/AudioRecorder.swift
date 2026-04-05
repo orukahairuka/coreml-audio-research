@@ -39,7 +39,10 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         let newRecorder = try AVAudioRecorder(url: url, settings: settings)
         newRecorder.delegate = self
         newRecorder.prepareToRecord()
-        newRecorder.record(forDuration: Self.maxDuration)
+        guard newRecorder.record(forDuration: Self.maxDuration) else {
+            try? FileManager.default.removeItem(at: url)
+            throw RecordingError.startFailed
+        }
 
         recorder = newRecorder
         isRecording = true
@@ -110,5 +113,15 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
         formatter.dateFormat = "yyyyMMdd_HHmmss"
         let name = "recording_\(formatter.string(from: Date())).wav"
         return recordingsDirectory.appendingPathComponent(name)
+    }
+
+    enum RecordingError: LocalizedError {
+        case startFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .startFailed: return "録音を開始できませんでした。"
+            }
+        }
     }
 }
