@@ -15,6 +15,8 @@ ios/CoreMLAudioApp/CoreMLAudioApp/
 ├── Views/         — SwiftUI View
 ├── ViewModels/    — ViewModel（UI ステート管理）
 ├── Models/        — CoreML 合成・音声処理ロジック
+├── MLModels/      — CoreML モデル (.mlpackage)
+├── Input/         — 入力音声ファイル (input_sample.wav 等)
 └── Result/        — 生成された音声ファイルの保存先（gitignore 対象）
 ```
 
