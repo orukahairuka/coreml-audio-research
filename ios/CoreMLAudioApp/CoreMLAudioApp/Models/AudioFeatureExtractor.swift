@@ -250,16 +250,29 @@ struct AudioFeatureExtractor {
         return (mel, frameCount)
     }
 
+    /// Hz → メル変換
+    static func hzToMel(_ hz: Float) -> Float {
+        return 2595.0 * log10(1.0 + hz / 700.0)
+    }
+
+    /// メル → Hz 変換
+    static func melToHz(_ mel: Float) -> Float {
+        return 700.0 * (pow(10.0, mel / 2595.0) - 1.0)
+    }
+
+    /// デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
+    static func applyDeemphasis(_ signal: [Float]) -> [Float] {
+        guard signal.count > 1 else { return signal }
+        var result = signal
+        for i in 1..<result.count {
+            result[i] = result[i] + preemphasisCoeff * result[i - 1]
+        }
+        return result
+    }
+
     /// メルフィルタバンク行列を生成する (librosa.filters.mel 相当)
     static func createMelFilterbank(sampleRate: Float, nFFT: Int, nMels: Int, fMin: Float, fMax: Float) -> [Float] {
         let binCount = nFFT / 2 + 1
-
-        func hzToMel(_ hz: Float) -> Float {
-            return 2595.0 * log10(1.0 + hz / 700.0)
-        }
-        func melToHz(_ mel: Float) -> Float {
-            return 700.0 * (pow(10.0, mel / 2595.0) - 1.0)
-        }
 
         let melMin = hzToMel(fMin)
         let melMax = hzToMel(fMax)
@@ -293,7 +306,7 @@ struct AudioFeatureExtractor {
 
         // Slaney 正規化
         for m in 0..<nMels {
-            let bandwidth = 2.0 * (melToHz(melPoints[m + 2]) - melToHz(melPoints[m])) / sampleRate
+            let bandwidth = 2.0 * (Self.melToHz(melPoints[m + 2]) - Self.melToHz(melPoints[m])) / sampleRate
             if bandwidth > 0 {
                 for k in 0..<binCount {
                     filterbank[m * binCount + k] /= bandwidth
