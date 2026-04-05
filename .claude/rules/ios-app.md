@@ -17,12 +17,12 @@ ios/CoreMLAudioApp/CoreMLAudioApp/
 ├── Models/        — CoreML 合成・音声処理ロジック
 ├── MLModels/      — CoreML モデル (.mlpackage)
 ├── Input/         — 入力音声ファイル (input_sample.wav 等)
-└── Result/        — 生成された音声ファイルの保存先（gitignore 対象）
+└── Result/        — Xcode グループのみ。実行時の保存先は Documents/Result/
 ```
 
 ### コーディングスタイル
 - トレーリングクロージャは使わない。引数名を明示して可読性を優先する
 
 ### 運用
-- 合成結果の音声ファイルは `Result/` に保存する
+- 合成結果の音声ファイルは実行時の `Documents/Result/` に保存する
 - 新しいファイルを追加する際は、既存の実装と重複がないか確認する
