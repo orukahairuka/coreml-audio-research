@@ -11,7 +11,7 @@ final class AudioSynthesizer {
     private var loadedComputeUnits: MLComputeUnits?
 
     /// 指定精度・計算デバイスで CoreML モデルをロードする（同じ設定でロード済みならスキップ）
-    func loadModels(precision: ModelPrecision, computeUnits: MLComputeUnits = .cpuAndGPU) throws {
+    func loadModels(precision: ModelPrecision, computeUnits: MLComputeUnits) throws {
         if loadedPrecision == precision && loadedComputeUnits == computeUnits
             && encoder != nil && decoder != nil && hifigan != nil {
             return
