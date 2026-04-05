@@ -24,7 +24,7 @@ final class AudioSynthesizer {
         guard let encoderURL = Bundle.main.url(forResource: encoderName, withExtension: "mlmodelc"),
               let decoderURL = Bundle.main.url(forResource: decoderName, withExtension: "mlmodelc"),
               let hifiganURL = Bundle.main.url(forResource: hifiganName, withExtension: "mlmodelc") else {
-            throw SynthesisError.modelNotFound
+            throw SynthesisError.modelNotFound(precision: precision.rawValue)
         }
 
         let config = MLModelConfiguration()
@@ -187,13 +187,14 @@ final class AudioSynthesizer {
     }
 
     enum SynthesisError: LocalizedError {
-        case modelNotFound
+        case modelNotFound(precision: String)
         case modelNotLoaded
         case decoderFailed
 
         var errorDescription: String? {
             switch self {
-            case .modelNotFound: return "CoreML モデルが見つかりません。.mlpackage をプロジェクトに追加してください。"
+            case .modelNotFound(let precision):
+                return "\(precision) の CoreML モデルが見つかりません。.mlpackage をプロジェクトに追加してください。"
             case .modelNotLoaded: return "モデルがロードされていません。"
             case .decoderFailed: return "Decoder の出力を取得できませんでした。"
             }
