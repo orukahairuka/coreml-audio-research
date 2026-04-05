@@ -152,10 +152,7 @@ final class AudioSynthesizer {
 
         // 5. デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
         await MainActor.run { onProgress("後処理中...", 0.95) }
-        let coeff = AudioFeatureExtractor.preemphasisCoeff
-        for i in 1..<waveform.count {
-            waveform[i] = waveform[i] + coeff * waveform[i - 1]
-        }
+        waveform = AudioFeatureExtractor.applyDeemphasis(waveform)
 
         // 6. 出力メルスペクトログラム (postnet_out を可視化用 dB に変換)
         var outputMelNormalized = [Float](repeating: 0, count: totalFrames * nMels)
