@@ -1,7 +1,8 @@
 venv/
 *.mlpackage/
 **/[Rr]esult/
-**/Input/
+**/Input/*
+!**/Input/input_sample.wav
 .DS_Store
 
 # Xcode
