@@ -4,12 +4,18 @@
 それぞれ別の CoreML モデルとして変換する。
 """
 
+import argparse
 import sys
 import os
 
 import numpy as np
 import torch
 import coremltools as ct
+from coremltools.optimize.coreml import (
+    OpLinearQuantizerConfig,
+    OptimizationConfig,
+    linear_quantize_weights,
+)
 
 PROJECT_ROOT = os.path.join(os.path.dirname(__file__), os.pardir)
 
@@ -59,9 +65,25 @@ def load_model():
     return model
 
 
-def convert_encoder(model):
+def get_compute_precision(precision_str):
+    if precision_str == "float16":
+        return ct.precision.FLOAT16
+    elif precision_str == "float32":
+        return ct.precision.FLOAT32
+    else:
+        # int8: まずfloat16で変換し、後で量子化する
+        return ct.precision.FLOAT16
+
+
+def quantize_int8(mlmodel):
+    op_config = OpLinearQuantizerConfig(mode="linear_symmetric", dtype="int8")
+    config = OptimizationConfig(global_config=op_config)
+    return linear_quantize_weights(mlmodel, config=config)
+
+
+def convert_encoder(model, precision):
     """Encoder を CoreML に変換し、精度を比較する"""
-    print("=== Encoder 変換 ===")
+    print(f"=== Encoder 変換 ({precision}) ===")
     encoder = EncoderWrapper(model)
     encoder.eval()
 
@@ -88,7 +110,13 @@ def convert_encoder(model):
             ct.TensorType(name="pos", shape=ct.Shape(shape=(1, ct.RangeDim(1, 1000, default=T_src))), dtype=np.int32),
         ],
         convert_to="mlprogram",
+        compute_precision=get_compute_precision(precision),
     )
+
+    if precision == "int8":
+        print("Int8 量子化中...")
+        mlmodel = quantize_int8(mlmodel)
+
     mlmodel.save(ENCODER_OUTPUT_PATH)
     print(f"保存完了: {ENCODER_OUTPUT_PATH}")
 
@@ -107,9 +135,9 @@ def convert_encoder(model):
     return mlmodel
 
 
-def convert_decoder(model):
+def convert_decoder(model, precision):
     """Decoder を CoreML に変換し、精度を比較する"""
-    print("=== Decoder 変換 ===")
+    print(f"=== Decoder 変換 ({precision}) ===")
     decoder = DecoderWrapper(model)
     decoder.eval()
 
@@ -142,7 +170,13 @@ def convert_decoder(model):
             ct.TensorType(name="pos", shape=ct.Shape(shape=(1, ct.RangeDim(1, 1000, default=T_trg))), dtype=np.int32),
         ],
         convert_to="mlprogram",
+        compute_precision=get_compute_precision(precision),
     )
+
+    if precision == "int8":
+        print("Int8 量子化中...")
+        mlmodel = quantize_int8(mlmodel)
+
     mlmodel.save(DECODER_OUTPUT_PATH)
     print(f"保存完了: {DECODER_OUTPUT_PATH}")
 
@@ -167,11 +201,19 @@ def convert_decoder(model):
 
 
 def main():
-    print("Transformer モデルをロード中...")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--precision",
+        choices=["float16", "float32", "int8"],
+        default="float16",
+    )
+    args = parser.parse_args()
+
+    print(f"Transformer モデルをロード中... (精度: {args.precision})")
     model = load_model()
 
-    convert_encoder(model)
-    convert_decoder(model)
+    convert_encoder(model, args.precision)
+    convert_decoder(model, args.precision)
 
     print("完了")
 

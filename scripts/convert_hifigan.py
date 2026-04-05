@@ -1,5 +1,6 @@
 """HiFi-GAN Generator を CoreML (.mlpackage) に変換するスクリプト"""
 
+import argparse
 import sys
 import os
 import json
@@ -7,6 +8,11 @@ import json
 import numpy as np
 import torch
 import coremltools as ct
+from coremltools.optimize.coreml import (
+    OpLinearQuantizerConfig,
+    OptimizationConfig,
+    linear_quantize_weights,
+)
 
 PROJECT_ROOT = os.path.join(os.path.dirname(__file__), os.pardir)
 
@@ -41,9 +47,32 @@ def load_generator():
     return generator
 
 
+def get_compute_precision(precision_str):
+    if precision_str == "float16":
+        return ct.precision.FLOAT16
+    elif precision_str == "float32":
+        return ct.precision.FLOAT32
+    else:
+        return ct.precision.FLOAT16
+
+
+def quantize_int8(mlmodel):
+    op_config = OpLinearQuantizerConfig(mode="linear_symmetric", dtype="int8")
+    config = OptimizationConfig(global_config=op_config)
+    return linear_quantize_weights(mlmodel, config=config)
+
+
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--precision",
+        choices=["float16", "float32", "int8"],
+        default="float16",
+    )
+    args = parser.parse_args()
+
     # 1. モデルロード
-    print("Generator をロード中...")
+    print(f"Generator をロード中... (精度: {args.precision})")
     generator = load_generator()
 
     # 2. ダミー入力
@@ -71,7 +100,13 @@ def main():
             )
         ],
         convert_to="mlprogram",
+        compute_precision=get_compute_precision(args.precision),
     )
+
+    if args.precision == "int8":
+        print("Int8 量子化中...")
+        mlmodel = quantize_int8(mlmodel)
+
     mlmodel.save(OUTPUT_PATH)
     print(f"保存完了: {OUTPUT_PATH}")
 
