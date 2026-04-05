@@ -5,8 +5,10 @@ PyTorch 版 (PronounSE/synthesis.py) と同じ処理を CoreML モデルで再�
 
 使い方:
     venv/bin/python scripts/synthesis_coreml.py <input.wav>
+    venv/bin/python scripts/synthesis_coreml.py --precision int8 <input.wav>
 """
 
+import argparse
 import sys
 import os
 
@@ -23,21 +25,25 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, "PronounSE", "Transformer"))
 from utils import get_spectrograms
 import hyperparams as hp
 
-# CoreML モデルのパス
-ENCODER_PATH = os.path.join(PROJECT_ROOT, "Transformer_Encoder.mlpackage")
-DECODER_PATH = os.path.join(PROJECT_ROOT, "Transformer_Decoder.mlpackage")
-HIFIGAN_PATH = os.path.join(PROJECT_ROOT, "HiFiGAN_Generator.mlpackage")
+
+def get_model_paths(precision):
+    return (
+        os.path.join(PROJECT_ROOT, f"Transformer_Encoder_{precision}.mlpackage"),
+        os.path.join(PROJECT_ROOT, f"Transformer_Decoder_{precision}.mlpackage"),
+        os.path.join(PROJECT_ROOT, f"HiFiGAN_Generator_{precision}.mlpackage"),
+    )
 
 SAVE_DIR = os.path.join(PROJECT_ROOT, "result")
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 
-def load_coreml_models():
-    """CoreML モデル 3 つをロードして返す"""
-    print("CoreML モデルをロード中...")
-    encoder = ct.models.MLModel(ENCODER_PATH)
-    decoder = ct.models.MLModel(DECODER_PATH)
-    hifigan = ct.models.MLModel(HIFIGAN_PATH)
+def load_coreml_models(precision):
+    """指定精度の CoreML モデル 3 つをロードして返す"""
+    encoder_path, decoder_path, hifigan_path = get_model_paths(precision)
+    print(f"CoreML モデルをロード中... (精度: {precision})")
+    encoder = ct.models.MLModel(encoder_path)
+    decoder = ct.models.MLModel(decoder_path)
+    hifigan = ct.models.MLModel(hifigan_path)
     return encoder, decoder, hifigan
 
 
@@ -109,11 +115,11 @@ def synthesize(encoder, decoder, hifigan, mel_src, pos_src):
     return y_hat.astype(np.float32)
 
 
-def main(file_path):
+def main(file_path, precision):
     base_name = os.path.splitext(os.path.basename(file_path))[0]
-    output_path = os.path.join(SAVE_DIR, f"{base_name}_coreml.wav")
+    output_path = os.path.join(SAVE_DIR, f"{base_name}_coreml_{precision}.wav")
 
-    encoder, decoder, hifigan = load_coreml_models()
+    encoder, decoder, hifigan = load_coreml_models(precision)
     mel_src, pos_src = wav2feature(file_path)
     print(f"入力: {file_path} ({mel_src.shape[1]} フレーム)")
 
@@ -124,9 +130,18 @@ def main(file_path):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--precision",
+        choices=["float16", "float32", "int8"],
+        default="float16",
+    )
+    parser.add_argument("input", nargs="?")
+    args = parser.parse_args()
+
     default_input = os.path.join(PROJECT_ROOT, "PronounSE", "input_sample.wav")
-    file_path = sys.argv[1] if len(sys.argv) > 1 else default_input
+    file_path = args.input if args.input else default_input
     if not os.path.isfile(file_path):
         print(f"エラー: ファイルが見つかりません: {file_path}")
         sys.exit(1)
-    main(file_path)
+    main(file_path, args.precision)
