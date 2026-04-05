@@ -55,6 +55,8 @@ final class SynthesisViewModel {
 
             let result = try await synthesizer.synthesize(
                 inputURL: inputURL,
+                precision: selectedPrecision,
+                computeUnit: selectedComputeUnit,
                 onProgress: { [weak self] (statusText: String, progressValue: Double) in
                     self?.status = statusText
                     self?.progress = progressValue
