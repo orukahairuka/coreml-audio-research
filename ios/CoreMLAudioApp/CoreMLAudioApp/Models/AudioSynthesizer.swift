@@ -96,7 +96,7 @@ final class AudioSynthesizer {
             ])
             let decoderOutput = try await decoder.prediction(from: decoderInput)
 
-            // 出力キーを取得
+            // 出力キーを取得（アルファベット順で mel_out が先、postnet 出力が後）
             let outputNames = decoderOutput.featureNames.sorted()
             lastMelOut = decoderOutput.featureValue(for: outputNames[0])?.multiArrayValue
             lastPostnetOut = decoderOutput.featureValue(for: outputNames[1])?.multiArrayValue

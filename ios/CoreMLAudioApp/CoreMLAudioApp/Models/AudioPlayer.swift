@@ -16,16 +16,22 @@ final class AudioPlayer {
         try AVAudioSession.sharedInstance().setActive(true)
         #endif
 
-        let format = AVAudioFormat(
+        guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: sampleRate,
             channels: 1,
             interleaved: false
-        )!
-        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(waveform.count))!
+        ) else {
+            throw PlaybackError.formatCreationFailed
+        }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(waveform.count)) else {
+            throw PlaybackError.bufferCreationFailed
+        }
         buffer.frameLength = AVAudioFrameCount(waveform.count)
 
-        let channelData = buffer.floatChannelData![0]
+        guard let channelData = buffer.floatChannelData?[0] else {
+            throw PlaybackError.bufferCreationFailed
+        }
         for i in 0..<waveform.count {
             channelData[i] = waveform[i]
         }
@@ -42,6 +48,7 @@ final class AudioPlayer {
             AVLinearPCMIsFloatKey: false,
             AVLinearPCMIsBigEndianKey: false,
         ]
+        // do スコープで outputFile を閉じてから AVAudioPlayer で読み込む
         do {
             let outputFile = try AVAudioFile(
                 forWriting: tempURL,
@@ -61,5 +68,17 @@ final class AudioPlayer {
 
     func stop() {
         player?.stop()
+    }
+
+    enum PlaybackError: LocalizedError {
+        case formatCreationFailed
+        case bufferCreationFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .formatCreationFailed: return "オーディオフォーマットの作成に失敗しました。"
+            case .bufferCreationFailed: return "オーディオバッファの作成に失敗しました。"
+            }
+        }
     }
 }
