@@ -1,12 +1,17 @@
 import AVFoundation
 
 /// 波形データの再生を管理する
-final class AudioPlayer {
+final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
 
     private var player: AVAudioPlayer?
+    var onPlaybackFinished: (() -> Void)?
 
     var isPlaying: Bool {
         player?.isPlaying ?? false
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        onPlaybackFinished?()
     }
 
     /// Float 波形配列から WAV を生成して再生する
@@ -60,6 +65,7 @@ final class AudioPlayer {
         }
 
         let newPlayer = try AVAudioPlayer(contentsOf: tempURL)
+        newPlayer.delegate = self
         newPlayer.volume = 1.0
         newPlayer.prepareToPlay()
         newPlayer.play()

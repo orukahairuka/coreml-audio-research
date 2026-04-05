@@ -13,7 +13,7 @@ final class SynthesisViewModel {
     var errorMessage: String?
 
     var canPlay: Bool { synthesisResult != nil && !isProcessing }
-    var isPlaying: Bool { audioPlayer.isPlaying }
+    private(set) var isPlaying: Bool = false
     var hasResult: Bool { synthesisResult != nil }
 
     // MARK: - Private
@@ -21,6 +21,14 @@ final class SynthesisViewModel {
     private let synthesizer = AudioSynthesizer()
     private let audioPlayer = AudioPlayer()
     private(set) var synthesisResult: SynthesisResult?
+
+    // MARK: - Init
+
+    init() {
+        audioPlayer.onPlaybackFinished = { [weak self] in
+            Task { @MainActor in self?.isPlaying = false }
+        }
+    }
 
     // MARK: - Actions
 
@@ -62,6 +70,7 @@ final class SynthesisViewModel {
         guard let waveform = synthesisResult?.outputWaveform else { return }
         do {
             try audioPlayer.play(waveform: waveform, sampleRate: AudioFeatureExtractor.sampleRate)
+            isPlaying = true
         } catch {
             errorMessage = "再生エラー: \(error.localizedDescription)"
         }
@@ -69,5 +78,6 @@ final class SynthesisViewModel {
 
     func stopPlayback() {
         audioPlayer.stop()
+        isPlaying = false
     }
 }
