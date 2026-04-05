@@ -31,29 +31,7 @@ cd PronounSE && venv/bin/python synthesis.py <input.wav>
 - `PronounSE/HiFiGAN/chkpt/g_00009000`
 - .gitignore 対象。GitHub Releases から取得する
 
-## 修正履歴（PronounSE）
-
-- `synthesis.py`: `.cuda()` → `.to(DEVICE)`, `map_location=DEVICE` 追加, plot関数のゼロパディングバグ修正
-- `Transformer/network.py`: MelDecoder.forward 内の `.cuda()` → `device=memory.device`
-
 ## 注意
 
 - PronounSE は git submodule（元は Jinmaro のリポジトリ）
 - チェックポイント (`*.pth`, `*.tar`, `g_*`), `result/`, `venv/`, `my_voice.wav` は gitignore 対象
-
-## Git運用ルール
-
-### ブランチ
-- main に直接コミット・push しない。必ずブランチを切って PR 経由でマージする
-- ブランチ名は `feature/` に統一する（`fix/` `docs/` などは使わない）
-- 同じスコープの変更は同じブランチで行う（レビュー修正やレポート追加も同じブランチ）
-
-### コミット
-- コミットは小さめの粒度で行う
-- コミットを実行する前に、必ず実行してよいか y/n で確認する
-- コミットメッセージは日本語で書く
-- `feat:` `fix:` などのプレフィックスは付けない
-- 関連のない変更を1つのコミットにまとめない
-
-### PR
-- PR を立てる前に必ず動作確認（スクリプト実行・ビルド等）を行う
