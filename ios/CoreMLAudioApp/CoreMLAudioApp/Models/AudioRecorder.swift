@@ -58,6 +58,8 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
 
         if flag {
             onRecordingFinished?(recorder.url)
+        } else {
+            try? FileManager.default.removeItem(at: recorder.url)
         }
     }
 
