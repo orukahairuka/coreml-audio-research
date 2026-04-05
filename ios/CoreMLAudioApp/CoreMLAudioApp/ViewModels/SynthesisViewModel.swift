@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 
 /// 合成・再生・録音のオーケストレーションを担う ViewModel
@@ -60,12 +61,21 @@ final class SynthesisViewModel {
 
     func startRecording() {
         errorMessage = nil
-        do {
-            try audioRecorder.startRecording()
-            isRecording = true
-            recordingTime = 0
-        } catch {
-            errorMessage = "録音開始エラー: \(error.localizedDescription)"
+        AVAudioApplication.requestRecordPermission { [weak self] granted in
+            Task { @MainActor in
+                guard let self else { return }
+                guard granted else {
+                    self.errorMessage = "マイクの使用が許可されていません。設定アプリから許可してください。"
+                    return
+                }
+                do {
+                    try self.audioRecorder.startRecording()
+                    self.isRecording = true
+                    self.recordingTime = 0
+                } catch {
+                    self.errorMessage = "録音開始エラー: \(error.localizedDescription)"
+                }
+            }
         }
     }
 
