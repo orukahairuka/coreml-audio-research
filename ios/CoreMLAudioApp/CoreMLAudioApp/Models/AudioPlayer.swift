@@ -47,8 +47,9 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         if !FileManager.default.fileExists(atPath: resultDir.path) {
             try FileManager.default.createDirectory(at: resultDir, withIntermediateDirectories: true)
         }
-        let outputURL = resultDir.appendingPathComponent("output.wav")
-        try? FileManager.default.removeItem(at: outputURL)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        let outputURL = resultDir.appendingPathComponent("output_\(formatter.string(from: Date())).wav")
 
         let wavSettings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),
