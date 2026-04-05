@@ -47,8 +47,12 @@ final class SynthesisViewModel {
             Task { @MainActor in
                 self?.isRecording = false
                 self?.recordingTime = 0
-                self?.loadRecordings()
-                self?.audioSource = .recording(url)
+                if let url {
+                    self?.loadRecordings()
+                    self?.audioSource = .recording(url)
+                } else {
+                    self?.errorMessage = "録音に失敗しました"
+                }
             }
         }
         audioRecorder.onTimeUpdate = { [weak self] time in

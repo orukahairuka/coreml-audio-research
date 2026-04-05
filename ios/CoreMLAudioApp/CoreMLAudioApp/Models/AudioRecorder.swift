@@ -9,7 +9,8 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
     private var recorder: AVAudioRecorder?
     private var timer: Timer?
 
-    var onRecordingFinished: ((URL) -> Void)?
+    /// 録音完了時に呼ばれる。成功時は URL、失敗時は nil
+    var onRecordingFinished: ((URL?) -> Void)?
     var onTimeUpdate: ((TimeInterval) -> Void)?
 
     private(set) var isRecording = false
@@ -66,6 +67,7 @@ final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
             onRecordingFinished?(recorder.url)
         } else {
             try? FileManager.default.removeItem(at: recorder.url)
+            onRecordingFinished?(nil)
         }
     }
 
