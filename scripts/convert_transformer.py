@@ -27,8 +27,8 @@ import hyperparams as hp
 TRANSFORMER_CHKPT = os.path.join(
     PROJECT_ROOT, "PronounSE", "Transformer", "chkpt", "chkpt__20000.pth.tar"
 )
-ENCODER_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "Transformer_Encoder.mlpackage")
-DECODER_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "Transformer_Decoder.mlpackage")
+def get_output_path(model_name, precision):
+    return os.path.join(PROJECT_ROOT, f"{model_name}_{precision}.mlpackage")
 
 
 class EncoderWrapper(torch.nn.Module):
@@ -117,8 +117,9 @@ def convert_encoder(model, precision):
         print("Int8 量子化中...")
         mlmodel = quantize_int8(mlmodel)
 
-    mlmodel.save(ENCODER_OUTPUT_PATH)
-    print(f"保存完了: {ENCODER_OUTPUT_PATH}")
+    output_path = get_output_path("Transformer_Encoder", precision)
+    mlmodel.save(output_path)
+    print(f"保存完了: {output_path}")
 
     # 精度比較
     print("出力比較中...")
@@ -177,8 +178,9 @@ def convert_decoder(model, precision):
         print("Int8 量子化中...")
         mlmodel = quantize_int8(mlmodel)
 
-    mlmodel.save(DECODER_OUTPUT_PATH)
-    print(f"保存完了: {DECODER_OUTPUT_PATH}")
+    output_path = get_output_path("Transformer_Decoder", precision)
+    mlmodel.save(output_path)
+    print(f"保存完了: {output_path}")
 
     # 精度比較
     print("出力比較中...")

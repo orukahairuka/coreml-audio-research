@@ -21,7 +21,8 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, "PronounSE", "HiFiGAN"))
 from models import Generator
 
 HIFIGAN_CHKPT_DIR = os.path.join(PROJECT_ROOT, "PronounSE", "HiFiGAN", "chkpt")
-OUTPUT_PATH = os.path.join(PROJECT_ROOT, "HiFiGAN_Generator.mlpackage")
+def get_output_path(precision):
+    return os.path.join(PROJECT_ROOT, f"HiFiGAN_Generator_{precision}.mlpackage")
 
 
 class AttrDict(dict):
@@ -107,8 +108,9 @@ def main():
         print("Int8 量子化中...")
         mlmodel = quantize_int8(mlmodel)
 
-    mlmodel.save(OUTPUT_PATH)
-    print(f"保存完了: {OUTPUT_PATH}")
+    output_path = get_output_path(args.precision)
+    mlmodel.save(output_path)
+    print(f"保存完了: {output_path}")
 
     # 6. 変換前後の出力比較
     print("出力比較中...")
