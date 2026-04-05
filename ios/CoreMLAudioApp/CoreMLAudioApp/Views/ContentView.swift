@@ -27,42 +27,46 @@ struct ContentView: View {
 
                 // アクションボタン
                 VStack(spacing: 12) {
-                    Button {
-                        Task { await viewModel.runSynthesis() }
-                    } label: {
-                        Label("合成実行", systemImage: "waveform")
-                            .frame(maxWidth: .infinity)
-                    }
+                    Button(
+                        action: { Task { await viewModel.runSynthesis() } },
+                        label: {
+                            Label("合成実行", systemImage: "waveform")
+                                .frame(maxWidth: .infinity)
+                        }
+                    )
                     .buttonStyle(.borderedProminent)
                     .disabled(viewModel.isProcessing)
 
-                    Button {
-                        viewModel.playOutput()
-                    } label: {
-                        Label("再生", systemImage: "play.fill")
-                            .frame(maxWidth: .infinity)
-                    }
+                    Button(
+                        action: { viewModel.playOutput() },
+                        label: {
+                            Label("再生", systemImage: "play.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                    )
                     .buttonStyle(.bordered)
                     .disabled(!viewModel.canPlay)
 
-                    Button {
-                        viewModel.stopPlayback()
-                    } label: {
-                        Label("停止", systemImage: "stop.fill")
-                            .frame(maxWidth: .infinity)
-                    }
+                    Button(
+                        action: { viewModel.stopPlayback() },
+                        label: {
+                            Label("停止", systemImage: "stop.fill")
+                                .frame(maxWidth: .infinity)
+                        }
+                    )
                     .buttonStyle(.bordered)
                     .disabled(!viewModel.isPlaying)
                 }
 
                 // 解析結果
                 if let result = viewModel.synthesisResult {
-                    NavigationLink {
-                        AnalysisView(result: result)
-                    } label: {
-                        Label("解析結果を表示", systemImage: "chart.bar.xaxis")
-                            .frame(maxWidth: .infinity)
-                    }
+                    NavigationLink(
+                        destination: { AnalysisView(result: result) },
+                        label: {
+                            Label("解析結果を表示", systemImage: "chart.bar.xaxis")
+                                .frame(maxWidth: .infinity)
+                        }
+                    )
                     .buttonStyle(.bordered)
                 }
 
