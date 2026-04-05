@@ -10,7 +10,7 @@ final class AudioSynthesizer {
 
     /// CoreML モデルをロードする（ロード済みの場合はスキップ）
     func loadModels() throws {
-        if encoder != nil { return }
+        if encoder != nil && decoder != nil && hifigan != nil { return }
 
         guard let encoderURL = Bundle.main.url(forResource: "Transformer_Encoder", withExtension: "mlmodelc"),
               let decoderURL = Bundle.main.url(forResource: "Transformer_Decoder", withExtension: "mlmodelc"),
@@ -21,9 +21,13 @@ final class AudioSynthesizer {
         let config = MLModelConfiguration()
         config.computeUnits = .cpuAndGPU
 
-        encoder = try MLModel(contentsOf: encoderURL, configuration: config)
-        decoder = try MLModel(contentsOf: decoderURL, configuration: config)
-        hifigan = try MLModel(contentsOf: hifiganURL, configuration: config)
+        let enc = try MLModel(contentsOf: encoderURL, configuration: config)
+        let dec = try MLModel(contentsOf: decoderURL, configuration: config)
+        let hifi = try MLModel(contentsOf: hifiganURL, configuration: config)
+
+        encoder = enc
+        decoder = dec
+        hifigan = hifi
     }
 
     /// 入力音声 URL から合成を実行し、SynthesisResult を返す
