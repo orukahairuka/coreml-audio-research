@@ -70,74 +70,19 @@ final class AudioSynthesizer {
 
         // 3. Decoder (自己回帰ループ)
         await MainActor.run { onProgress("Decoder 実行中... (0/\(frameCount))", 0.1) }
-
-        // 初期入力: ゼロベクトル [1, 1, 256]
-        var decoderInputData = [Float](repeating: 0, count: nMels)
-        var currentLength = 1
-        var lastMelOut: MLMultiArray?
-        var lastPostnetOut: MLMultiArray?
-        var decoderStepStats = [DecoderStepStats]()
-
-        for step in 0..<frameCount {
-            // decoder_input: [1, currentLength, 256]
-            let decInput = try MLMultiArray(shape: [1, currentLength as NSNumber, nMels as NSNumber], dataType: .float32)
-            for i in 0..<(currentLength * nMels) {
-                decInput[i] = NSNumber(value: decoderInputData[i])
+        let decoderRunner = DecoderRunner(model: decoder)
+        let (postnetOut, decoderStepStats) = try await decoderRunner.run(
+            memory: memory,
+            frameCount: frameCount,
+            nMels: nMels,
+            onStep: { completed in
+                let progress = 0.1 + 0.8 * Double(completed) / Double(frameCount)
+                onProgress("Decoder 実行中... (\(completed)/\(frameCount))", progress)
             }
-
-            // pos: [1, currentLength]
-            let decPos = try MLMultiArray(shape: [1, currentLength as NSNumber], dataType: .int32)
-            for i in 0..<currentLength {
-                decPos[i] = NSNumber(value: Int32(i + 1))
-            }
-
-            let decoderInput = try MLDictionaryFeatureProvider(dictionary: [
-                "memory": MLFeatureValue(multiArray: memory),
-                "decoder_input": MLFeatureValue(multiArray: decInput),
-                "pos": MLFeatureValue(multiArray: decPos)
-            ])
-            let decoderOutput = try await decoder.prediction(from: decoderInput)
-
-            // mel_out は変換時に明示命名済み。postnet 出力は残りのキーから取得
-            let postnetKey = decoderOutput.featureNames.first(where: { $0 != "mel_out" }) ?? ""
-            lastMelOut = decoderOutput.featureValue(for: "mel_out")?.multiArrayValue
-            lastPostnetOut = decoderOutput.featureValue(for: postnetKey)?.multiArrayValue
-
-            // 最後のフレームを取得して入力に追加
-            guard let melOut = lastMelOut else { throw SynthesisError.decoderFailed }
-
-            // デバッグ: 先頭・中間・末尾の5ステップずつ + NaN/Inf 検出時は全ステップ記録
-            let melStats = ArrayStats.compute(from: melOut)
-            let postStats = lastPostnetOut.map { ArrayStats.compute(from: $0) }
-                ?? ArrayStats(min: 0, max: 0, mean: 0, hasNaN: false, hasInf: false)
-            let shouldRecord = step < 5
-                || step >= frameCount - 5
-                || (frameCount > 10 && step >= frameCount / 2 - 2 && step <= frameCount / 2 + 2)
-                || melStats.hasNaN || melStats.hasInf
-                || postStats.hasNaN || postStats.hasInf
-            if shouldRecord {
-                decoderStepStats.append(DecoderStepStats(
-                    step: step, melOut: melStats, postnetOut: postStats
-                ))
-            }
-
-            for i in 0..<nMels {
-                decoderInputData.append(melOut[[0, (currentLength - 1) as NSNumber, i as NSNumber]].floatValue)
-            }
-            currentLength += 1
-
-            let progressValue = 0.1 + 0.8 * Double(step + 1) / Double(frameCount)
-            await MainActor.run { onProgress("Decoder 実行中... (\(step + 1)/\(frameCount))", progressValue) }
-
-            // UI 更新のために yield
-            if step % 10 == 0 {
-                await Task.yield()
-            }
-        }
+        )
 
         // 4. HiFi-GAN
         await MainActor.run { onProgress("HiFi-GAN 実行中...", 0.9) }
-        guard let postnetOut = lastPostnetOut else { throw SynthesisError.decoderFailed }
         let totalFrames = frameCount
 
         // 入力統計は転置前の postnetOut で計算（min/max/mean/NaN/Inf は要素順に依存しないため転置後と同値）
