@@ -64,25 +64,8 @@ final class AudioSynthesizer {
 
         // 2. Encoder
         await MainActor.run { onProgress("Encoder 実行中...", 0.05) }
-        let melArray = try MLMultiArray(shape: [1, frameCount as NSNumber, nMels as NSNumber], dataType: .float32)
-        for i in 0..<(frameCount * nMels) {
-            melArray[i] = NSNumber(value: melData[i])
-        }
-
-        let posArray = try MLMultiArray(shape: [1, frameCount as NSNumber], dataType: .int32)
-        for i in 0..<frameCount {
-            posArray[i] = NSNumber(value: Int32(i + 1))
-        }
-
-        let encoderInput = try MLDictionaryFeatureProvider(dictionary: [
-            "mel": MLFeatureValue(multiArray: melArray),
-            "pos": MLFeatureValue(multiArray: posArray)
-        ])
-        let encoderOutput = try await encoder.prediction(from: encoderInput)
-        guard let memoryFeature = encoderOutput.featureValue(for: encoderOutput.featureNames.first ?? ""),
-              let memory = memoryFeature.multiArrayValue else {
-            throw SynthesisError.decoderFailed
-        }
+        let encoderRunner = EncoderRunner(model: encoder)
+        let memory = try await encoderRunner.run(mel: melData, frameCount: frameCount, nMels: nMels)
         let encoderStats = ArrayStats.compute(from: memory)
 
         // 3. Decoder (自己回帰ループ)
