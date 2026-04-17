@@ -10,50 +10,6 @@ final class AudioSynthesizer {
     private var loadedPrecision: ModelPrecision?
     private var loadedComputeUnits: MLComputeUnits?
 
-    // MARK: - Debug Helpers
-
-    /// MLMultiArray の統計情報を計算する
-    private func computeStats(of array: MLMultiArray) -> ArrayStats {
-        let count = array.count
-        var minVal: Float = .infinity
-        var maxVal: Float = -.infinity
-        var sum: Float = 0
-        var hasNaN = false
-        var hasInf = false
-        for i in 0..<count {
-            let v = array[i].floatValue
-            if v.isNaN { hasNaN = true }
-            if v.isInfinite { hasInf = true }
-            if v < minVal { minVal = v }
-            if v > maxVal { maxVal = v }
-            sum += v
-        }
-        return ArrayStats(
-            min: minVal, max: maxVal, mean: sum / Float(count),
-            hasNaN: hasNaN, hasInf: hasInf
-        )
-    }
-
-    /// Float 配列の統計情報を計算する
-    private func computeStats(of array: [Float]) -> ArrayStats {
-        var minVal: Float = .infinity
-        var maxVal: Float = -.infinity
-        var sum: Float = 0
-        var hasNaN = false
-        var hasInf = false
-        for v in array {
-            if v.isNaN { hasNaN = true }
-            if v.isInfinite { hasInf = true }
-            if v < minVal { minVal = v }
-            if v > maxVal { maxVal = v }
-            sum += v
-        }
-        return ArrayStats(
-            min: minVal, max: maxVal, mean: sum / Float(array.count),
-            hasNaN: hasNaN, hasInf: hasInf
-        )
-    }
-
     /// 指定精度・計算デバイスで CoreML モデルをロードする（同じ設定でロード済みならスキップ）
     func loadModels(precision: ModelPrecision, computeUnits: MLComputeUnits) throws {
         if loadedPrecision == precision && loadedComputeUnits == computeUnits
@@ -127,7 +83,7 @@ final class AudioSynthesizer {
               let memory = memoryFeature.multiArrayValue else {
             throw SynthesisError.decoderFailed
         }
-        let encoderStats = computeStats(of: memory)
+        let encoderStats = ArrayStats.compute(from: memory)
 
         // 3. Decoder (自己回帰ループ)
         await MainActor.run { onProgress("Decoder 実行中... (0/\(frameCount))", 0.1) }
@@ -168,8 +124,8 @@ final class AudioSynthesizer {
             guard let melOut = lastMelOut else { throw SynthesisError.decoderFailed }
 
             // デバッグ: 先頭・中間・末尾の5ステップずつ + NaN/Inf 検出時は全ステップ記録
-            let melStats = computeStats(of: melOut)
-            let postStats = lastPostnetOut.map { computeStats(of: $0) }
+            let melStats = ArrayStats.compute(from: melOut)
+            let postStats = lastPostnetOut.map { ArrayStats.compute(from: $0) }
                 ?? ArrayStats(min: 0, max: 0, mean: 0, hasNaN: false, hasInf: false)
             let shouldRecord = step < 5
                 || step >= frameCount - 5
@@ -209,7 +165,7 @@ final class AudioSynthesizer {
             }
         }
 
-        let hifiganInputStats = computeStats(of: vocoderInput)
+        let hifiganInputStats = ArrayStats.compute(from: vocoderInput)
 
         let hifiganInputProvider = try MLDictionaryFeatureProvider(dictionary: [
             "mel": MLFeatureValue(multiArray: vocoderInput)
@@ -219,7 +175,7 @@ final class AudioSynthesizer {
               let waveformArray = waveformFeature.multiArrayValue else {
             throw SynthesisError.decoderFailed
         }
-        let hifiganOutputStats = computeStats(of: waveformArray)
+        let hifiganOutputStats = ArrayStats.compute(from: waveformArray)
 
         // 波形を Float 配列に変換
         let sampleCount = waveformArray.count
@@ -227,12 +183,12 @@ final class AudioSynthesizer {
         for i in 0..<sampleCount {
             waveform[i] = waveformArray[i].floatValue
         }
-        let waveformBeforeDeemphasis = computeStats(of: waveform)
+        let waveformBeforeDeemphasis = ArrayStats.compute(from: waveform)
 
         // 5. デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
         await MainActor.run { onProgress("後処理中...", 0.95) }
         waveform = AudioFeatureExtractor.applyDeemphasis(waveform)
-        let waveformAfterDeemphasis = computeStats(of: waveform)
+        let waveformAfterDeemphasis = ArrayStats.compute(from: waveform)
 
         // デバッグ情報をまとめる
         let debugInfo = PipelineDebugInfo(
