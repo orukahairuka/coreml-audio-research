@@ -138,34 +138,14 @@ final class AudioSynthesizer {
         // 4. HiFi-GAN
         await MainActor.run { onProgress("HiFi-GAN 実行中...", 0.9) }
         guard let postnetOut = lastPostnetOut else { throw SynthesisError.decoderFailed }
-
-        // postnet_out: [1, T, 256] → [1, 256, T] に転置
         let totalFrames = frameCount
-        let vocoderInput = try MLMultiArray(shape: [1, nMels as NSNumber, totalFrames as NSNumber], dataType: .float32)
-        for t in 0..<totalFrames {
-            for m in 0..<nMels {
-                vocoderInput[[0, m as NSNumber, t as NSNumber]] = postnetOut[[0, t as NSNumber, m as NSNumber]]
-            }
-        }
 
-        let hifiganInputStats = ArrayStats.compute(from: vocoderInput)
+        // 入力統計は転置前の postnetOut で計算（min/max/mean/NaN/Inf は要素順に依存しないため転置後と同値）
+        let hifiganInputStats = ArrayStats.compute(from: postnetOut)
 
-        let hifiganInputProvider = try MLDictionaryFeatureProvider(dictionary: [
-            "mel": MLFeatureValue(multiArray: vocoderInput)
-        ])
-        let hifiganOutput = try await hifigan.prediction(from: hifiganInputProvider)
-        guard let waveformFeature = hifiganOutput.featureValue(for: hifiganOutput.featureNames.first ?? ""),
-              let waveformArray = waveformFeature.multiArrayValue else {
-            throw SynthesisError.decoderFailed
-        }
-        let hifiganOutputStats = ArrayStats.compute(from: waveformArray)
-
-        // 波形を Float 配列に変換
-        let sampleCount = waveformArray.count
-        var waveform = [Float](repeating: 0, count: sampleCount)
-        for i in 0..<sampleCount {
-            waveform[i] = waveformArray[i].floatValue
-        }
+        let vocoderRunner = VocoderRunner(model: hifigan)
+        var waveform = try await vocoderRunner.run(postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels)
+        let hifiganOutputStats = ArrayStats.compute(from: waveform)
         let waveformBeforeDeemphasis = ArrayStats.compute(from: waveform)
 
         // 5. デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
