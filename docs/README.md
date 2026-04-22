@@ -16,6 +16,8 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-04-05 | [ios-app-implementation](2026-04-05/ios-app-implementation.md) | iOS アプリ (CoreMLAudioApp) の実装詳細 |
 | 2026-04-17 | [coreml-api-notes](2026-04-17/coreml-api-notes.md) | CoreML API の典型パターンを EncoderRunner 題材に整理 |
 | 2026-04-17 | [models-refactor](2026-04-17/models-refactor.md) | iOS 合成パイプラインのリファクタ作業セッションメモ |
+| 2026-04-22 | [decoder-runner-breakdown](2026-04-22/decoder-runner-breakdown.md) | DecoderRunner.swift を【T】【C】【U】【D】の 4 種類に色分けして読み解くメモ |
+| 2026-04-22 | [coreml-wrapping-analysis](2026-04-22/coreml-wrapping-analysis.md) | CoreML のラップ・型変換を全種類洗い出し、1 秒合成あたり約 114 万回発生していることを集計 |
 
 ## トピック別
 
@@ -31,7 +33,10 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [ios-app-implementation](2026-04-05/ios-app-implementation.md)
 - [coreml-api-notes](2026-04-17/coreml-api-notes.md)
 - [models-refactor](2026-04-17/models-refactor.md)
+- [decoder-runner-breakdown](2026-04-22/decoder-runner-breakdown.md)
+- [coreml-wrapping-analysis](2026-04-22/coreml-wrapping-analysis.md)
 
 ### 理論・前提知識メモ
 
 - [fft-vs-stft](2026-04-05/fft-vs-stft.md)
+- [decoder-runner-breakdown](2026-04-22/decoder-runner-breakdown.md)
