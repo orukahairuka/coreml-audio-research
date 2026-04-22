@@ -91,7 +91,6 @@ final class AudioSynthesizer {
         let vocoderRunner = VocoderRunner(model: hifigan)
         var waveform = try await vocoderRunner.run(postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels)
         let hifiganOutputStats = ArrayStats.compute(from: waveform)
-        let waveformBeforeDeemphasis = ArrayStats.compute(from: waveform)
 
         // 5. デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
         await MainActor.run { onProgress("後処理中...", 0.95) }
@@ -104,7 +103,6 @@ final class AudioSynthesizer {
             decoderSteps: decoderStepStats,
             hifiganInput: hifiganInputStats,
             hifiganOutput: hifiganOutputStats,
-            waveformBeforeDeemphasis: waveformBeforeDeemphasis,
             waveformAfterDeemphasis: waveformAfterDeemphasis
         )
 

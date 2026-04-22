@@ -75,6 +75,5 @@ struct PipelineDebugInfo {
     let decoderSteps: [DecoderStepStats]
     let hifiganInput: ArrayStats
     let hifiganOutput: ArrayStats
-    let waveformBeforeDeemphasis: ArrayStats
     let waveformAfterDeemphasis: ArrayStats
 }

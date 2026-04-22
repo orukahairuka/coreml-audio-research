@@ -48,7 +48,6 @@ struct DebugStatsView: View {
                 Divider()
 
                 // Waveform
-                statsRow(title: "Waveform (before de-emphasis)", stats: debugInfo.waveformBeforeDeemphasis)
                 statsRow(title: "Waveform (after de-emphasis)", stats: debugInfo.waveformAfterDeemphasis)
             }
         }
@@ -73,8 +72,6 @@ struct DebugStatsView: View {
         lines.append("[HiFi-GAN output]")
         lines.append(debugInfo.hifiganOutput.summary)
         lines.append("")
-        lines.append("[Waveform (before de-emphasis)]")
-        lines.append(debugInfo.waveformBeforeDeemphasis.summary)
         lines.append("[Waveform (after de-emphasis)]")
         lines.append(debugInfo.waveformAfterDeemphasis.summary)
         return lines.joined(separator: "\n")
