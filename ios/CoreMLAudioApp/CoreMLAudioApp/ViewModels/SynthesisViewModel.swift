@@ -142,12 +142,40 @@ final class SynthesisViewModel {
             )
 
             synthesisResult = result
+            saveMelArtifacts(result: result)
             status = "合成完了"
             progress = 1.0
             playOutput()
         } catch {
             errorMessage = error.localizedDescription
             status = "エラー"
+        }
+    }
+
+    private func saveMelArtifacts(result: SynthesisResult) {
+        // 入力メル: 全組み合わせで同じなので固定名で上書き
+        do {
+            try MelArtifactWriter.write(
+                melData: result.inputMelSpectrogram,
+                frameCount: result.inputFrameCount,
+                nMels: result.nMels,
+                baseName: "input_mel"
+            )
+        } catch {
+            print("[MelArtifactWriter] 入力メル保存失敗: \(error.localizedDescription)")
+        }
+
+        // 出力メル: 精度・デバイスでファイル名を分ける
+        let baseName = "output_mel_\(result.precision.rawValue)_\(result.computeUnit.rawValue)"
+        do {
+            try MelArtifactWriter.write(
+                melData: result.outputMelSpectrogram,
+                frameCount: result.outputFrameCount,
+                nMels: result.nMels,
+                baseName: baseName
+            )
+        } catch {
+            print("[MelArtifactWriter] 出力メル保存失敗 (\(baseName)): \(error.localizedDescription)")
         }
     }
 
