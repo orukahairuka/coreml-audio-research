@@ -117,11 +117,15 @@ final class AudioSynthesizer {
         }
         let outputDisplayMel = AudioFeatureExtractor.denormalizeToDisplayDb(outputMelNormalized)
 
+        let outputDurationMs = Double(waveform.count) / AudioFeatureExtractor.sampleRate * 1000.0
+        let modelSizeBytes = Self.computeModelSizeBytes(precision: precision)
         let timing = TimingInfo(
             encoderMs: encoderMs,
             decoderTotalMs: decoderTotalMs,
             decoderStepCount: frameCount,
-            hifiganMs: hifiganMs
+            hifiganMs: hifiganMs,
+            outputDurationMs: outputDurationMs,
+            modelSizeBytes: modelSizeBytes
         )
 
         return SynthesisResult(
@@ -138,6 +142,38 @@ final class AudioSynthesizer {
             debugInfo: debugInfo,
             timing: timing
         )
+    }
+
+    /// 指定 precision の 3 モデル (Encoder + Decoder + HiFi-GAN) の .mlmodelc 合計バイト数を返す
+    private static func computeModelSizeBytes(precision: ModelPrecision) -> Int64 {
+        let names = [
+            "Transformer_Encoder_\(precision.suffix)",
+            "Transformer_Decoder_\(precision.suffix)",
+            "HiFiGAN_Generator_\(precision.suffix)",
+        ]
+        var total: Int64 = 0
+        for name in names {
+            guard let url = Bundle.main.url(forResource: name, withExtension: "mlmodelc") else { continue }
+            total += directorySizeBytes(at: url)
+        }
+        return total
+    }
+
+    /// ディレクトリ配下の全ファイル合計サイズ (バイト)
+    private static func directorySizeBytes(at url: URL) -> Int64 {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]
+        ) else { return 0 }
+        var size: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            if values?.isRegularFile == true, let s = values?.fileSize {
+                size += Int64(s)
+            }
+        }
+        return size
     }
 
     enum SynthesisError: LocalizedError {

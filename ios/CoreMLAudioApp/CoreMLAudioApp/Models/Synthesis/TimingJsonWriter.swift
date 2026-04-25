@@ -26,6 +26,9 @@ enum TimingJsonWriter {
         let decoderAvgPerStepMs: Double
         let hifiganMs: Double
         let totalPredictMs: Double
+        let outputDurationMs: Double
+        let realTimeFactor: Double
+        let modelSizeBytes: Int64
     }
 
     /// 出力ディレクトリ (`Documents/Result/timing/`)。無ければ作る
@@ -66,7 +69,10 @@ enum TimingJsonWriter {
             decoderStepCount: timing.decoderStepCount,
             decoderAvgPerStepMs: timing.decoderAvgPerStepMs,
             hifiganMs: timing.hifiganMs,
-            totalPredictMs: timing.totalPredictMs
+            totalPredictMs: timing.totalPredictMs,
+            outputDurationMs: timing.outputDurationMs,
+            realTimeFactor: timing.realTimeFactor,
+            modelSizeBytes: timing.modelSizeBytes
         )
 
         let encoder = JSONEncoder()
