@@ -114,8 +114,8 @@ final class CoreMLAudioAppUITests: XCTestCase {
             throw UITestError.elementNotFound("synthesizeButton")
         }
         // Processing 中は disabled。確実に有効化されてからタップ
-        let enabled = NSPredicate(format: "isEnabled == true")
-        expectation(for: enabled, evaluatedWith: button, handler: nil)
+        let enabledPred = NSPredicate(format: "isEnabled == true")
+        expectation(for: enabledPred, evaluatedWith: button, handler: nil)
         waitForExpectations(timeout: 10)
         button.tap()
 
@@ -123,9 +123,16 @@ final class CoreMLAudioAppUITests: XCTestCase {
         guard statusLabel.waitForExistence(timeout: 5) else {
             throw UITestError.elementNotFound("synthesisStatus")
         }
-        // status が "合成完了" または "エラー" になるまで待つ
-        let done = NSPredicate(format: "label == %@ OR label == %@", "合成完了", "エラー")
-        expectation(for: done, evaluatedWith: statusLabel, handler: nil)
+
+        // status は前回の "合成完了" がまだ残っている瞬間があり、ラベル監視だと
+        // 合成を待たずに即マッチしてしまう。ボタンの isEnabled は isProcessing と
+        // 直結しているので、disabled (合成開始) → enabled (合成終了) の遷移を見る。
+        let processingPred = NSPredicate(format: "isEnabled == false")
+        expectation(for: processingPred, evaluatedWith: button, handler: nil)
+        waitForExpectations(timeout: 5)
+
+        let finishedPred = NSPredicate(format: "isEnabled == true")
+        expectation(for: finishedPred, evaluatedWith: button, handler: nil)
         waitForExpectations(timeout: timeout)
 
         let finalStatus = statusLabel.label
