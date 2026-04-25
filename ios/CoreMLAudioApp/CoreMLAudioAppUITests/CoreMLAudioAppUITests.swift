@@ -38,7 +38,6 @@ final class CoreMLAudioAppUITests: XCTestCase {
                         try runOneCombination(app: app, precision: precision, computeUnit: computeUnit)
                     } catch {
                         failures.append((combo, "\(error)"))
-                        XCTFail("組み合わせ失敗 (\(combo)): \(error)")
                     }
                 }
             }
