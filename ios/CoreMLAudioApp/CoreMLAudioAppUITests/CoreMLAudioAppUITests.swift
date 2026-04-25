@@ -71,6 +71,8 @@ final class CoreMLAudioAppUITests: XCTestCase {
         guard option.waitForExistence(timeout: 5) else {
             throw UITestError.elementNotFound(identifier)
         }
+        // 直前の合成完了直後は picker がまだ disabled な瞬間があるので有効化を待つ
+        try waitUntilEnabled(option, name: identifier)
         option.tap()
     }
 
@@ -81,6 +83,7 @@ final class CoreMLAudioAppUITests: XCTestCase {
         guard picker.waitForExistence(timeout: 5) else {
             throw UITestError.elementNotFound("computeUnitPicker")
         }
+        try waitUntilEnabled(picker, name: "computeUnitPicker")
         picker.tap()
 
         let identifier = "computeUnit.\(rawValue)"
@@ -89,6 +92,18 @@ final class CoreMLAudioAppUITests: XCTestCase {
             throw UITestError.elementNotFound(identifier)
         }
         option.tap()
+    }
+
+    /// 要素が isEnabled == true になるまで待つ
+    @MainActor
+    private func waitUntilEnabled(_ element: XCUIElement, name: String, timeout: TimeInterval = 10) throws {
+        if element.isEnabled { return }
+        let enabled = NSPredicate(format: "isEnabled == true")
+        expectation(for: enabled, evaluatedWith: element, handler: nil)
+        waitForExpectations(timeout: timeout)
+        if !element.isEnabled {
+            throw UITestError.elementNotFound("\(name) (enabled 待ちタイムアウト)")
+        }
     }
 
     /// 合成実行ボタンを押して「合成完了」ステータスを待つ
