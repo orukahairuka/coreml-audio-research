@@ -28,13 +28,16 @@ SIMCTL_SETS=(
 CONTAINER=""
 FOUND_SET=""
 FOUND_DEVICE=""
+# XCUITest が完走したコンテナだけを拾うため mel/ と timing/ の両方を要求する。
+# ここを緩めると AudioPlayer の副産物 (output_*.wav) しか無いコンテナを掴んで
+# rsync --delete でローカルの mel/ timing/ が消える。
 for SET_ARG in "${SIMCTL_SETS[@]}"; do
     # 該当 set 配下のデバイスをリスト
     while IFS= read -r DEVICE_ID; do
         [[ -z "${DEVICE_ID}" ]] && continue
         # shellcheck disable=SC2086
         C=$(xcrun simctl ${SET_ARG} get_app_container "${DEVICE_ID}" "${BUNDLE_ID}" data 2>/dev/null || true)
-        if [[ -n "${C}" && -d "${C}/Documents/Result" ]]; then
+        if [[ -n "${C}" && -d "${C}/Documents/Result/mel" && -d "${C}/Documents/Result/timing" ]]; then
             CONTAINER="${C}"
             FOUND_SET="${SET_ARG:-default}"
             FOUND_DEVICE="${DEVICE_ID}"
@@ -44,8 +47,8 @@ for SET_ARG in "${SIMCTL_SETS[@]}"; do
 done
 
 if [[ -z "${CONTAINER}" ]]; then
-    echo "エラー: ${BUNDLE_ID} のデータコンテナ (Documents/Result) が見つかりません" >&2
-    echo "先に XCUITest を走らせて、成果物を生成してから再実行してください" >&2
+    echo "エラー: ${BUNDLE_ID} のデータコンテナで mel/ と timing/ が両方揃ったものが見つかりません" >&2
+    echo "先に XCUITest (testCaptureAllCombinations) を完走させてから再実行してください" >&2
     exit 1
 fi
 echo "set: ${FOUND_SET}"
