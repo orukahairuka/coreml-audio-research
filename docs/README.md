@@ -21,6 +21,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-04-22 | [research-plan](2026-04-22/research-plan.md) | ここまでの前提スナップショット + 先生相談アジェンダ（論点・仮案・音質指標カタログ） |
 | 2026-04-22 | [advisor-meeting-todo](2026-04-22/advisor-meeting-todo.md) | 先生相談後の持ち帰り TODO（Float32/GPU、HiFi-GAN 差し替え、比較指標、データ・文献） |
 | 2026-04-25 | [timing-measurement](2026-04-25/timing-measurement.md) | CoreML 各段の `predict()` 所要時間を計測する機構の実装メモ |
+| 2026-04-25 | [ui-test-loop-fixes](2026-04-25/ui-test-loop-fixes.md) | 12通りバッチ取得 XCUITest のフレーク対策3点（XCTFail 二重計上 / picker disabled 残留 / status ラベル即マッチ）の解説 |
 
 ## トピック別
 
@@ -39,6 +40,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [decoder-runner-breakdown](2026-04-22/decoder-runner-breakdown.md)
 - [coreml-wrapping-analysis](2026-04-22/coreml-wrapping-analysis.md)
 - [timing-measurement](2026-04-25/timing-measurement.md)
+- [ui-test-loop-fixes](2026-04-25/ui-test-loop-fixes.md)
 
 ### 理論・前提知識メモ
 
