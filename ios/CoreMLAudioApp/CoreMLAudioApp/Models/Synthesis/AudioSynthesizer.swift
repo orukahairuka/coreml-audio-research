@@ -65,13 +65,13 @@ final class AudioSynthesizer {
         // 2. Encoder
         await MainActor.run { onProgress("Encoder 実行中...", 0.05) }
         let encoderRunner = EncoderRunner(model: encoder)
-        let memory = try await encoderRunner.run(mel: melData, frameCount: frameCount, nMels: nMels)
+        let (memory, encoderMs) = try await encoderRunner.run(mel: melData, frameCount: frameCount, nMels: nMels)
         let encoderStats = ArrayStats.compute(from: memory)
 
         // 3. Decoder (自己回帰ループ)
         await MainActor.run { onProgress("Decoder 実行中... (0/\(frameCount))", 0.1) }
         let decoderRunner = DecoderRunner(model: decoder)
-        let (postnetOut, decoderStepStats) = try await decoderRunner.run(
+        let (postnetOut, decoderStepStats, decoderTotalMs) = try await decoderRunner.run(
             memory: memory,
             frameCount: frameCount,
             nMels: nMels,
@@ -89,7 +89,9 @@ final class AudioSynthesizer {
         let hifiganInputStats = ArrayStats.compute(from: postnetOut)
 
         let vocoderRunner = VocoderRunner(model: hifigan)
-        var waveform = try await vocoderRunner.run(postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels)
+        let vocoderResult = try await vocoderRunner.run(postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels)
+        var waveform = vocoderResult.waveform
+        let hifiganMs = vocoderResult.predictMs
         let hifiganOutputStats = ArrayStats.compute(from: waveform)
 
         // 5. デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
@@ -115,6 +117,13 @@ final class AudioSynthesizer {
         }
         let outputDisplayMel = AudioFeatureExtractor.denormalizeToDisplayDb(outputMelNormalized)
 
+        let timing = TimingInfo(
+            encoderMs: encoderMs,
+            decoderTotalMs: decoderTotalMs,
+            decoderStepCount: frameCount,
+            hifiganMs: hifiganMs
+        )
+
         return SynthesisResult(
             precision: precision,
             computeUnit: computeUnit,
@@ -126,7 +135,8 @@ final class AudioSynthesizer {
             outputFrameCount: totalFrames,
             nMels: nMels,
             sampleRate: AudioFeatureExtractor.sampleRate,
-            debugInfo: debugInfo
+            debugInfo: debugInfo,
+            timing: timing
         )
     }
 

@@ -20,19 +20,20 @@ final class DecoderRunner {
     ///   - frameCount: 生成するフレーム数 T (入力メルのフレーム数と同じ)
     ///   - nMels: メルビン数 (256)
     ///   - onStep: 各ステップ完了時に呼ばれる (引数は完了済みステップ数, 1-indexed)
-    /// - Returns: 最終ステップの postnet 出力と、選別された各ステップの統計
+    /// - Returns: 最終ステップの postnet 出力、選別された各ステップの統計、`predict()` 全ステップ合計の所要時間 (ms)
     func run(
         memory: MLMultiArray,
         frameCount: Int,
         nMels: Int,
         onStep: @MainActor (Int) -> Void
-    ) async throws -> (postnetOut: MLMultiArray, stepStats: [DecoderStepStats]) {
+    ) async throws -> (postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double) {
         // 初期入力: ゼロベクトル [1, 1, 256]（最初の 1 フレームぶん）
         var decoderInputData = [Float](repeating: 0, count: nMels)
         var currentLength = 1
         var lastMelOut: MLMultiArray?
         var lastPostnetOut: MLMultiArray?
         var stepStats = [DecoderStepStats]()
+        var totalPredictMs: Double = 0
 
         for step in 0..<frameCount {
             // decoder_input: [1, currentLength, 256]
@@ -52,7 +53,9 @@ final class DecoderRunner {
                 "decoder_input": MLFeatureValue(multiArray: decInput),
                 "pos": MLFeatureValue(multiArray: decPos)
             ])
+            let t0 = CFAbsoluteTimeGetCurrent()
             let output = try await model.prediction(from: input)
+            totalPredictMs += (CFAbsoluteTimeGetCurrent() - t0) * 1000
 
             // mel_out は変換時に明示命名済み。postnet 出力は残りのキーから取得
             let postnetKey = output.featureNames.first(where: { $0 != "mel_out" }) ?? ""
@@ -96,6 +99,6 @@ final class DecoderRunner {
         guard let postnetOut = lastPostnetOut else {
             throw AudioSynthesizer.SynthesisError.decoderFailed
         }
-        return (postnetOut, stepStats)
+        return (postnetOut, stepStats, totalPredictMs)
     }
 }

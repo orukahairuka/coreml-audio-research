@@ -18,4 +18,6 @@ struct SynthesisResult {
     let sampleRate: Double
     /// パイプライン各ステップのデバッグ統計情報
     let debugInfo: PipelineDebugInfo
+    /// CoreML 各段の predict() 所要時間
+    let timing: TimingInfo
 }
