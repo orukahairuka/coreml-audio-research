@@ -65,13 +65,13 @@ final class AudioSynthesizer {
         // 2. Encoder
         await MainActor.run { onProgress("Encoder 実行中...", 0.05) }
         let encoderRunner = EncoderRunner(model: encoder)
-        let memory = try await encoderRunner.run(mel: melData, frameCount: frameCount, nMels: nMels)
+        let (memory, encoderMs) = try await encoderRunner.run(mel: melData, frameCount: frameCount, nMels: nMels)
         let encoderStats = ArrayStats.compute(from: memory)
 
         // 3. Decoder (自己回帰ループ)
         await MainActor.run { onProgress("Decoder 実行中... (0/\(frameCount))", 0.1) }
         let decoderRunner = DecoderRunner(model: decoder)
-        let (postnetOut, decoderStepStats) = try await decoderRunner.run(
+        let (postnetOut, decoderStepStats, decoderTotalMs) = try await decoderRunner.run(
             memory: memory,
             frameCount: frameCount,
             nMels: nMels,
@@ -89,7 +89,9 @@ final class AudioSynthesizer {
         let hifiganInputStats = ArrayStats.compute(from: postnetOut)
 
         let vocoderRunner = VocoderRunner(model: hifigan)
-        var waveform = try await vocoderRunner.run(postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels)
+        let vocoderResult = try await vocoderRunner.run(postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels)
+        var waveform = vocoderResult.waveform
+        let hifiganMs = vocoderResult.predictMs
         let hifiganOutputStats = ArrayStats.compute(from: waveform)
 
         // 5. デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
@@ -115,6 +117,17 @@ final class AudioSynthesizer {
         }
         let outputDisplayMel = AudioFeatureExtractor.denormalizeToDisplayDb(outputMelNormalized)
 
+        let outputDurationMs = Double(waveform.count) / AudioFeatureExtractor.sampleRate * 1000.0
+        let modelSizeBytes = Self.computeModelSizeBytes(precision: precision)
+        let timing = TimingInfo(
+            encoderMs: encoderMs,
+            decoderTotalMs: decoderTotalMs,
+            decoderStepCount: frameCount,
+            hifiganMs: hifiganMs,
+            outputDurationMs: outputDurationMs,
+            modelSizeBytes: modelSizeBytes
+        )
+
         return SynthesisResult(
             precision: precision,
             computeUnit: computeUnit,
@@ -126,8 +139,41 @@ final class AudioSynthesizer {
             outputFrameCount: totalFrames,
             nMels: nMels,
             sampleRate: AudioFeatureExtractor.sampleRate,
-            debugInfo: debugInfo
+            debugInfo: debugInfo,
+            timing: timing
         )
+    }
+
+    /// 指定 precision の 3 モデル (Encoder + Decoder + HiFi-GAN) の .mlmodelc 合計バイト数を返す
+    private static func computeModelSizeBytes(precision: ModelPrecision) -> Int64 {
+        let names = [
+            "Transformer_Encoder_\(precision.suffix)",
+            "Transformer_Decoder_\(precision.suffix)",
+            "HiFiGAN_Generator_\(precision.suffix)",
+        ]
+        var total: Int64 = 0
+        for name in names {
+            guard let url = Bundle.main.url(forResource: name, withExtension: "mlmodelc") else { continue }
+            total += directorySizeBytes(at: url)
+        }
+        return total
+    }
+
+    /// ディレクトリ配下の全ファイル合計サイズ (バイト)
+    private static func directorySizeBytes(at url: URL) -> Int64 {
+        let fm = FileManager.default
+        guard let enumerator = fm.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]
+        ) else { return 0 }
+        var size: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            let values = try? fileURL.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            if values?.isRegularFile == true, let s = values?.fileSize {
+                size += Int64(s)
+            }
+        }
+        return size
     }
 
     enum SynthesisError: LocalizedError {

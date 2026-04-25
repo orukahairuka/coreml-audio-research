@@ -15,7 +15,10 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     /// Float 波形配列から WAV を生成して再生する
-    func play(waveform: [Float], sampleRate: Double) throws {
+    ///
+    /// - Parameter baseName: 拡張子抜きのファイル名 (例: `"Float16_cpuAndGPU"`)。
+    ///   nil の場合はタイムスタンプ命名 (`output_yyyyMMdd_HHmmss.wav`) で保存する。
+    func play(waveform: [Float], sampleRate: Double, baseName: String? = nil) throws {
         #if os(iOS)
         try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
         try AVAudioSession.sharedInstance().setActive(true)
@@ -47,9 +50,15 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         if !FileManager.default.fileExists(atPath: resultDir.path) {
             try FileManager.default.createDirectory(at: resultDir, withIntermediateDirectories: true)
         }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyyMMdd_HHmmss"
-        let outputURL = resultDir.appendingPathComponent("output_\(formatter.string(from: Date())).wav")
+        let fileName: String
+        if let baseName = baseName {
+            fileName = "output_\(baseName).wav"
+        } else {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyyMMdd_HHmmss"
+            fileName = "output_\(formatter.string(from: Date())).wav"
+        }
+        let outputURL = resultDir.appendingPathComponent(fileName)
 
         let wavSettings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatLinearPCM),

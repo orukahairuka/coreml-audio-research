@@ -16,8 +16,8 @@ final class VocoderRunner {
     ///   - postnetOut: Decoder の postnet 出力 [1, T, nMels]
     ///   - totalFrames: T (時間方向のフレーム数)
     ///   - nMels: メルビン数 (256)
-    /// - Returns: 合成波形 (デエンファシス前の生 PCM, 22050 Hz)
-    func run(postnetOut: MLMultiArray, totalFrames: Int, nMels: Int) async throws -> [Float] {
+    /// - Returns: 合成波形 (デエンファシス前の生 PCM, 22050 Hz) と `predict()` の所要時間 (ms)
+    func run(postnetOut: MLMultiArray, totalFrames: Int, nMels: Int) async throws -> (waveform: [Float], predictMs: Double) {
         // 1. 転置: [1, T, nMels] → [1, nMels, T]
         //    HiFi-GAN は時間軸を最後に持つ形式を要求する
         let input = try MLMultiArray(shape: [1, nMels as NSNumber, totalFrames as NSNumber], dataType: .float32)
@@ -27,11 +27,14 @@ final class VocoderRunner {
             }
         }
 
-        // 2. CoreML predict
+        // 2. CoreML predict (時間計測は predict 呼び出しのみ)
         let inputProvider = try MLDictionaryFeatureProvider(dictionary: [
             "mel": MLFeatureValue(multiArray: input)
         ])
+        let t0 = CFAbsoluteTimeGetCurrent()
         let output = try await model.prediction(from: inputProvider)
+        let predictMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+
         guard let waveformFeature = output.featureValue(for: output.featureNames.first ?? ""),
               let waveformArray = waveformFeature.multiArrayValue else {
             throw AudioSynthesizer.SynthesisError.decoderFailed
@@ -43,6 +46,6 @@ final class VocoderRunner {
         for i in 0..<sampleCount {
             waveform[i] = waveformArray[i].floatValue
         }
-        return waveform
+        return (waveform, predictMs)
     }
 }

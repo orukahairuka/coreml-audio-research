@@ -143,6 +143,7 @@ final class SynthesisViewModel {
 
             synthesisResult = result
             saveMelArtifacts(result: result)
+            saveTimingArtifact(result: result)
             status = "合成完了"
             progress = 1.0
             playOutput()
@@ -179,10 +180,27 @@ final class SynthesisViewModel {
         }
     }
 
-    func playOutput() {
-        guard let waveform = synthesisResult?.outputWaveform else { return }
+    private func saveTimingArtifact(result: SynthesisResult) {
         do {
-            try audioPlayer.play(waveform: waveform, sampleRate: AudioFeatureExtractor.sampleRate)
+            try TimingJsonWriter.write(
+                timing: result.timing,
+                precision: result.precision,
+                computeUnit: result.computeUnit
+            )
+        } catch {
+            print("[TimingJsonWriter] 保存失敗: \(error.localizedDescription)")
+        }
+    }
+
+    func playOutput() {
+        guard let result = synthesisResult else { return }
+        let baseName = "\(result.precision.rawValue)_\(result.computeUnit.rawValue)"
+        do {
+            try audioPlayer.play(
+                waveform: result.outputWaveform,
+                sampleRate: AudioFeatureExtractor.sampleRate,
+                baseName: baseName
+            )
             isPlaying = true
         } catch {
             errorMessage = "再生エラー: \(error.localizedDescription)"
