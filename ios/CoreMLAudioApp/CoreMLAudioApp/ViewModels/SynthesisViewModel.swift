@@ -193,9 +193,14 @@ final class SynthesisViewModel {
     }
 
     func playOutput() {
-        guard let waveform = synthesisResult?.outputWaveform else { return }
+        guard let result = synthesisResult else { return }
+        let baseName = "\(result.precision.rawValue)_\(result.computeUnit.rawValue)"
         do {
-            try audioPlayer.play(waveform: waveform, sampleRate: AudioFeatureExtractor.sampleRate)
+            try audioPlayer.play(
+                waveform: result.outputWaveform,
+                sampleRate: AudioFeatureExtractor.sampleRate,
+                baseName: baseName
+            )
             isPlaying = true
         } catch {
             errorMessage = "再生エラー: \(error.localizedDescription)"
