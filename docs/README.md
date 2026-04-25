@@ -20,6 +20,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-04-22 | [coreml-wrapping-analysis](2026-04-22/coreml-wrapping-analysis.md) | CoreML のラップ・型変換を全種類洗い出し、1 秒合成あたり約 114 万回発生していることを集計 |
 | 2026-04-22 | [research-plan](2026-04-22/research-plan.md) | ここまでの前提スナップショット + 先生相談アジェンダ（論点・仮案・音質指標カタログ） |
 | 2026-04-22 | [advisor-meeting-todo](2026-04-22/advisor-meeting-todo.md) | 先生相談後の持ち帰り TODO（Float32/GPU、HiFi-GAN 差し替え、比較指標、データ・文献） |
+| 2026-04-25 | [timing-measurement](2026-04-25/timing-measurement.md) | CoreML 各段の `predict()` 所要時間を計測する機構の実装メモ |
 
 ## トピック別
 
@@ -37,6 +38,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [models-refactor](2026-04-17/models-refactor.md)
 - [decoder-runner-breakdown](2026-04-22/decoder-runner-breakdown.md)
 - [coreml-wrapping-analysis](2026-04-22/coreml-wrapping-analysis.md)
+- [timing-measurement](2026-04-25/timing-measurement.md)
 
 ### 理論・前提知識メモ
 
