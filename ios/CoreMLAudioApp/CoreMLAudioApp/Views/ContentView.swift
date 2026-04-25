@@ -18,6 +18,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(viewModel.status)
                             .font(.body)
+                            .accessibilityIdentifier("synthesisStatus")
                         if viewModel.isProcessing {
                             ProgressView(value: viewModel.progress)
                         }
@@ -96,19 +97,25 @@ struct ContentView: View {
                 // 精度選択
                 Picker("精度", selection: $viewModel.selectedPrecision) {
                     ForEach(ModelPrecision.allCases) { precision in
-                        Text(precision.rawValue).tag(precision)
+                        Text(precision.rawValue)
+                            .tag(precision)
+                            .accessibilityIdentifier("precision.\(precision.rawValue)")
                     }
                 }
                 .pickerStyle(.segmented)
                 .disabled(viewModel.isProcessing)
+                .accessibilityIdentifier("precisionPicker")
 
                 // 計算デバイス選択
                 Picker("計算デバイス", selection: $viewModel.selectedComputeUnit) {
                     ForEach(ComputeUnitOption.allCases) { option in
-                        Text(option.displayName).tag(option)
+                        Text(option.displayName)
+                            .tag(option)
+                            .accessibilityIdentifier("computeUnit.\(option.rawValue)")
                     }
                 }
                 .disabled(viewModel.isProcessing)
+                .accessibilityIdentifier("computeUnitPicker")
 
                 // アクションボタン
                 VStack(spacing: 12) {
@@ -121,6 +128,7 @@ struct ContentView: View {
                     )
                     .buttonStyle(.borderedProminent)
                     .disabled(viewModel.isProcessing || viewModel.isRecording)
+                    .accessibilityIdentifier("synthesizeButton")
 
                     Button(
                         action: { viewModel.playOutput() },
