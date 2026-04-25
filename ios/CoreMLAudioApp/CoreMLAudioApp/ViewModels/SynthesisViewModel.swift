@@ -143,6 +143,7 @@ final class SynthesisViewModel {
 
             synthesisResult = result
             saveMelArtifacts(result: result)
+            saveTimingArtifact(result: result)
             status = "合成完了"
             progress = 1.0
             playOutput()
@@ -176,6 +177,18 @@ final class SynthesisViewModel {
             )
         } catch {
             print("[MelArtifactWriter] 出力メル保存失敗 (\(baseName)): \(error.localizedDescription)")
+        }
+    }
+
+    private func saveTimingArtifact(result: SynthesisResult) {
+        do {
+            try TimingJsonWriter.write(
+                timing: result.timing,
+                precision: result.precision,
+                computeUnit: result.computeUnit
+            )
+        } catch {
+            print("[TimingJsonWriter] 保存失敗: \(error.localizedDescription)")
         }
     }
 
