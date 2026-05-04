@@ -12,6 +12,7 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: 24) {
                 // ステータス表示
                 GroupBox("ステータス") {
@@ -38,6 +39,7 @@ struct ContentView: View {
                                     Text("サンプル音声")
                                     Spacer()
                                 }
+                                .contentShape(Rectangle())
                             }
                         )
                         .foregroundStyle(viewModel.audioSource == .bundledSample ? .primary : .secondary)
@@ -54,6 +56,7 @@ struct ContentView: View {
                                             .lineLimit(1)
                                         Spacer()
                                     }
+                                    .contentShape(Rectangle())
                                 }
                             )
                             .foregroundStyle(viewModel.audioSource == .recording(url) ? .primary : .secondary)
@@ -106,7 +109,8 @@ struct ContentView: View {
                 .disabled(viewModel.isProcessing)
                 .accessibilityIdentifier("precisionPicker")
 
-                // 計算デバイス選択
+                // 計算デバイス選択 (.menu を明示。default だと iOS 26 で .navigationLink になり
+                // Picker ↔ Picker のレンダリング順で選択がコミットされない事象があった)
                 Picker("計算デバイス", selection: $viewModel.selectedComputeUnit) {
                     ForEach(ComputeUnitOption.allCases) { option in
                         Text(option.displayName)
@@ -114,6 +118,7 @@ struct ContentView: View {
                             .accessibilityIdentifier("computeUnit.\(option.rawValue)")
                     }
                 }
+                .pickerStyle(.menu)
                 .disabled(viewModel.isProcessing)
                 .accessibilityIdentifier("computeUnitPicker")
 
@@ -125,6 +130,7 @@ struct ContentView: View {
                             .accessibilityIdentifier("shapeMode.\(option.rawValue)")
                     }
                 }
+                .pickerStyle(.menu)
                 .disabled(viewModel.isProcessing)
                 .accessibilityIdentifier("shapeModePicker")
 
@@ -243,6 +249,7 @@ struct ContentView: View {
                 }
             }
             .padding()
+            }
             .navigationTitle("CoreML Audio")
         }
     }
