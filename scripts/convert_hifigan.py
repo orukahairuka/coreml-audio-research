@@ -96,8 +96,10 @@ def main():
         inputs=[
             ct.TensorType(
                 name="mel",
+                # 下限 1 だと実機 .all で BNNS の shape 検証に失敗する
+                # （ResBlock の dilation=5 / kernel=11 が下限ケースで成立しない）
                 shape=ct.Shape(
-                    shape=(1, 256, ct.RangeDim(1, 1000, default=100))
+                    shape=(1, 256, ct.RangeDim(16, 1000, default=100))
                 ),
             )
         ],
