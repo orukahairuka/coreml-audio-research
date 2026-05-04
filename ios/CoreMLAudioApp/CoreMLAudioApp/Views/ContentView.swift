@@ -153,6 +153,60 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                 }
 
+                // HiFi-GAN 安定性テスト
+                Button(
+                    action: { Task { await viewModel.runStabilityTest() } },
+                    label: {
+                        Label("HiFi-GAN 安定性テスト", systemImage: "checklist")
+                            .frame(maxWidth: .infinity)
+                    }
+                )
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isProcessing || viewModel.isRecording)
+                .accessibilityIdentifier("stabilityTestButton")
+
+                if let summary = viewModel.stabilitySummary {
+                    GroupBox("安定性テスト結果") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(summary)
+                                .font(.caption)
+                            if let url = viewModel.stabilityCsvURL {
+                                Text("CSV: \(url.lastPathComponent)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                // F16 fixed262 cpuAndGPU vs all 出力差分テスト
+                Button(
+                    action: { Task { await viewModel.runVocoderDiffTest() } },
+                    label: {
+                        Label("F16 fixed262: cpuAndGPU ↔ all 差分", systemImage: "arrow.left.arrow.right.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                )
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isProcessing || viewModel.isRecording)
+                .accessibilityIdentifier("vocoderDiffTestButton")
+
+                if let summary = viewModel.diffSummary {
+                    GroupBox("出力差分テスト結果") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(summary)
+                                .font(.caption)
+                            if let url = viewModel.diffCsvURL {
+                                Text("CSV: \(url.lastPathComponent)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
                 // エラー表示
                 if let errorMessage = viewModel.errorMessage {
                     GroupBox {

@@ -35,7 +35,16 @@ final class SynthesisViewModel {
     private let synthesizer = AudioSynthesizer()
     private let audioPlayer = AudioPlayer()
     private let audioRecorder = AudioRecorder()
+    private let stabilityTester = VocoderStabilityTester()
     private(set) var synthesisResult: SynthesisResult?
+
+    // 安定性テストのサマリ（テスト直後に表示する）
+    private(set) var stabilityCsvURL: URL?
+    private(set) var stabilitySummary: String?
+
+    // 差分テストのサマリ
+    private(set) var diffCsvURL: URL?
+    private(set) var diffSummary: String?
 
     // MARK: - Init
 
@@ -190,6 +199,54 @@ final class SynthesisViewModel {
         } catch {
             print("[TimingJsonWriter] 保存失敗: \(error.localizedDescription)")
         }
+    }
+
+    /// Float16 fixed262 を `.cpuAndGPU` と `.all` で実行して出力波形の差分を比較する。
+    /// 結果は `Documents/Result/stability/vocoder_diff_f16_fixed262_<timestamp>.csv` と
+    /// 同名 prefix の `.npy` 3 本 (cpuAndGPU / all / diff) に保存される。
+    func runVocoderDiffTest() async {
+        errorMessage = nil
+        diffCsvURL = nil
+        diffSummary = nil
+        isProcessing = true
+        progress = 0
+        status = "差分テスト開始..."
+        defer { isProcessing = false }
+
+        let csvURL = await stabilityTester.runFloat16Fixed262DiffTest(onProgress: { [weak self] message in
+            self?.status = message
+        })
+        diffCsvURL = csvURL
+        diffSummary = status   // status の最終メッセージ ("差分テスト完了 — diff: ...") を表示用に保持
+        progress = 1.0
+    }
+
+    /// HiFi-GAN 7 モデル × 3 computeUnits を網羅的に試して結果を CSV に書き出す。
+    /// 結果は `Documents/Result/stability/vocoder_stability_<timestamp>.csv` に保存される。
+    func runStabilityTest() async {
+        errorMessage = nil
+        stabilityCsvURL = nil
+        stabilitySummary = nil
+        isProcessing = true
+        progress = 0
+        status = "安定性テスト開始..."
+        defer { isProcessing = false }
+
+        let (results, csvURL) = await stabilityTester.runAll(onProgress: { [weak self] message in
+            self?.status = message
+        })
+
+        stabilityCsvURL = csvURL
+
+        // サマリ: status 別件数 + 飽和(>=0.99)した組み合わせ数
+        let total = results.count
+        let success = results.filter { $0.status == "success" }.count
+        let saturated = results.filter { ($0.stats?.ratioOver099 ?? 0) > 0.5 || ($0.stats?.ratioUnderMinus099 ?? 0) > 0.5 }.count
+        let nans = results.filter { ($0.stats?.nanCount ?? 0) > 0 }.count
+        let failed = total - success
+        stabilitySummary = "実行: \(total) / 成功: \(success) / 失敗: \(failed) / 飽和: \(saturated) / NaN: \(nans)"
+        status = "安定性テスト完了"
+        progress = 1.0
     }
 
     func playOutput() {
