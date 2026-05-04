@@ -23,6 +23,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-04-25 | [timing-measurement](2026-04-25/timing-measurement.md) | CoreML 各段の `predict()` 所要時間を計測する機構の実装メモ |
 | 2026-04-25 | [ui-test-loop-fixes](2026-04-25/ui-test-loop-fixes.md) | 12通りバッチ取得 XCUITest のフレーク対策3点（XCTFail 二重計上 / picker disabled 残留 / status ラベル即マッチ）の解説 |
 | 2026-04-27 | [quantization-pareto-baseline](2026-04-27/quantization-pareto-baseline.md) | 量子化 × 計算デバイス 12 通りのサイズ・速さ・mel 劣化を1表にしたシミュレータ計測ベースライン |
+| 2026-04-27 | [float32-gpu-accumulation-experiment](2026-04-27/float32-gpu-accumulation-experiment.md) | Float32 × GPU 出力飽和の原因切り分け：累積精度 fp32 強制では直らず、中間テンソル fp16 保持が原因と確定 |
 
 ## トピック別
 
@@ -32,6 +33,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [hifigan-conversion](2026-03-21/hifigan-conversion.md)
 - [coreml-pipeline](2026-03-21/coreml-pipeline.md)
 - [float32-gpu-debug-report](2026-04-05/float32-gpu-debug-report.md)
+- [float32-gpu-accumulation-experiment](2026-04-27/float32-gpu-accumulation-experiment.md)
 
 ### iOS 実装
 
