@@ -14,6 +14,9 @@ final class SynthesisViewModel {
     var errorMessage: String?
     var selectedPrecision: ModelPrecision = .float16
     var selectedComputeUnit: ComputeUnitOption = .cpuAndGPU
+    /// HiFi-GAN 入力 shape バリアント。本番デフォルトは `.fixed262` (実機テストで全 computeUnits 安定)。
+    /// 他の RangeDim 系は研究用に残してあり、UI から切り替えられる。
+    var selectedShapeMode: ShapeModeOption = .fixed262
 
     var canPlay: Bool { synthesisResult != nil && !isProcessing }
     private(set) var isPlaying: Bool = false
@@ -117,12 +120,20 @@ final class SynthesisViewModel {
         progress = 0
         defer { isProcessing = false }
 
+        // Int8 や 未生成バリアントはここで弾く (ロード失敗より早く UI に伝える)
+        if !selectedShapeMode.isAvailable(for: selectedPrecision) {
+            errorMessage = "\(selectedPrecision.rawValue) + \(selectedShapeMode.displayName) のモデルは生成されていません"
+            status = "エラー"
+            return
+        }
+
         do {
             try synthesizer.loadModels(
                 precision: selectedPrecision,
-                computeUnits: selectedComputeUnit.mlComputeUnits
+                computeUnits: selectedComputeUnit.mlComputeUnits,
+                shapeMode: selectedShapeMode
             )
-            status = "モデルロード完了 (\(selectedPrecision.rawValue), \(selectedComputeUnit.displayName))"
+            status = "モデルロード完了 (\(selectedPrecision.rawValue), \(selectedShapeMode.displayName), \(selectedComputeUnit.displayName))"
 
             let inputURL: URL
             switch audioSource {

@@ -117,6 +117,17 @@ struct ContentView: View {
                 .disabled(viewModel.isProcessing)
                 .accessibilityIdentifier("computeUnitPicker")
 
+                // HiFi-GAN 入力 shape バリアント選択 (本番デフォルト: fixed262)
+                Picker("HiFi-GAN shape", selection: $viewModel.selectedShapeMode) {
+                    ForEach(ShapeModeOption.allCases) { option in
+                        Text(option.displayName)
+                            .tag(option)
+                            .accessibilityIdentifier("shapeMode.\(option.rawValue)")
+                    }
+                }
+                .disabled(viewModel.isProcessing)
+                .accessibilityIdentifier("shapeModePicker")
+
                 // アクションボタン
                 VStack(spacing: 12) {
                     Button(
@@ -222,6 +233,7 @@ struct ContentView: View {
                 GroupBox("情報") {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("モデル: PronounSE (\(viewModel.selectedPrecision.rawValue))")
+                        Text("HiFi-GAN shape: \(viewModel.selectedShapeMode.displayName)")
                         Text("計算デバイス: \(viewModel.selectedComputeUnit.displayName)")
                         Text("サンプルレート: 22050 Hz")
                         Text("入力: \(viewModel.audioSource.displayName)")

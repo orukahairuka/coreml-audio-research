@@ -9,17 +9,39 @@ final class AudioSynthesizer {
     private var hifigan: MLModel?
     private var loadedPrecision: ModelPrecision?
     private var loadedComputeUnits: MLComputeUnits?
+    private var loadedShapeMode: ShapeModeOption?
+    private var loadedHifiganName: String?
+    private var loadedHifiganShapeLabel: String?
+    private var loadedHifiganPolicy: VocoderInputPolicy?
 
-    /// 指定精度・計算デバイスで CoreML モデルをロードする（同じ設定でロード済みならスキップ）
-    func loadModels(precision: ModelPrecision, computeUnits: MLComputeUnits) throws {
+    /// 指定精度・計算デバイス・shape mode で CoreML モデルをロードする
+    /// （同じ設定でロード済みならスキップ）
+    ///
+    /// - Parameter shapeMode: HiFi-GAN の入力 shape バリアント。本番は `.fixed262` を推奨。
+    ///                        Int8 はバリアント未生成のため legacy mlpackage にフォールバックする。
+    func loadModels(precision: ModelPrecision, computeUnits: MLComputeUnits, shapeMode: ShapeModeOption) throws {
         if loadedPrecision == precision && loadedComputeUnits == computeUnits
+            && loadedShapeMode == shapeMode
             && encoder != nil && decoder != nil && hifigan != nil {
             return
         }
 
         let encoderName = "Transformer_Encoder_\(precision.suffix)"
         let decoderName = "Transformer_Decoder_\(precision.suffix)"
-        let hifiganName = "HiFiGAN_Generator_\(precision.suffix)"
+        // HiFi-GAN: 本番デフォルトは `.fixed262` だが、研究用に他のバリアントも UI から選べる。
+        // Int8 はバリアント未生成 → legacy mlpackage を使う (RangeDim(16, 1000))
+        let hifiganName: String
+        let hifiganShapeLabel: String
+        let hifiganPolicy: VocoderInputPolicy
+        if precision == .int8 {
+            hifiganName = "HiFiGAN_Generator_\(precision.suffix)"
+            hifiganShapeLabel = "legacy_range16_1000"
+            hifiganPolicy = .dynamic(maxT: 1000)
+        } else {
+            hifiganName = "HiFiGAN_Generator_\(precision.suffix)_\(shapeMode.modelSuffix)"
+            hifiganShapeLabel = shapeMode.modelSuffix
+            hifiganPolicy = shapeMode.inputPolicy
+        }
 
         guard let encoderURL = Bundle.main.url(forResource: encoderName, withExtension: "mlmodelc"),
               let decoderURL = Bundle.main.url(forResource: decoderName, withExtension: "mlmodelc"),
@@ -39,6 +61,10 @@ final class AudioSynthesizer {
         hifigan = hifi
         loadedPrecision = precision
         loadedComputeUnits = computeUnits
+        loadedShapeMode = shapeMode
+        loadedHifiganName = hifiganName
+        loadedHifiganShapeLabel = hifiganShapeLabel
+        loadedHifiganPolicy = hifiganPolicy
     }
 
     /// 入力音声 URL から合成を実行し、SynthesisResult を返す
@@ -88,11 +114,36 @@ final class AudioSynthesizer {
         // 入力統計は転置前の postnetOut で計算（min/max/mean/NaN/Inf は要素順に依存しないため転置後と同値）
         let hifiganInputStats = ArrayStats.compute(from: postnetOut)
 
-        let vocoderRunner = VocoderRunner(model: hifigan)
+        // shapeMode と policy はロード時に確定。ロード前なら fallback (.fixed(262)) を使う。
+        let vocoderPolicy = loadedHifiganPolicy ?? .fixed(targetT: 262)
+        let vocoderRunner = VocoderRunner(model: hifigan, policy: vocoderPolicy)
         let vocoderResult = try await vocoderRunner.run(postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels)
         var waveform = vocoderResult.waveform
         let hifiganMs = vocoderResult.predictMs
+        let hifiganInputT = vocoderResult.inputT
         let hifiganOutputStats = ArrayStats.compute(from: waveform)
+
+        // 本番ロギング: 実機で「どのモデル × どの設定で生成したか」と
+        // 「出力波形の数値プロファイル」を 1 行で残す。grep しやすいよう接頭辞を統一。
+        // ArrayStats は rms を持っていないため、ここで waveform をもう一度走査して計算する。
+        var sumSq: Double = 0
+        for v in waveform where v.isFinite { sumSq += Double(v) * Double(v) }
+        let rms = waveform.isEmpty ? Float.nan : Float((sumSq / Double(waveform.count)).squareRoot())
+        let nanFlag = hifiganOutputStats.hasNaN ? "yes" : "no"
+        let infFlag = hifiganOutputStats.hasInf ? "yes" : "no"
+        print(String(
+            format: "[HiFiGAN production] model=%@ precision=%@ shape_mode=%@ computeUnits=%@ "
+                + "input_shape=[1,%d,%d] output_count=%d "
+                + "min=%.6f max=%.6f mean=%.6e rms=%.6f nan=%@ inf=%@ predict_ms=%.3f",
+            loadedHifiganName ?? "?",
+            precision.rawValue,
+            loadedHifiganShapeLabel ?? "?",
+            computeUnit.rawValue,
+            nMels, hifiganInputT,
+            waveform.count,
+            hifiganOutputStats.min, hifiganOutputStats.max, hifiganOutputStats.mean, rms,
+            nanFlag, infFlag, hifiganMs
+        ))
 
         // 5. デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
         await MainActor.run { onProgress("後処理中...", 0.95) }
@@ -146,10 +197,16 @@ final class AudioSynthesizer {
 
     /// 指定 precision の 3 モデル (Encoder + Decoder + HiFi-GAN) の .mlmodelc 合計バイト数を返す
     private static func computeModelSizeBytes(precision: ModelPrecision) -> Int64 {
+        let hifigan: String
+        if precision == .int8 {
+            hifigan = "HiFiGAN_Generator_\(precision.suffix)"
+        } else {
+            hifigan = "HiFiGAN_Generator_\(precision.suffix)_fixed262"
+        }
         let names = [
             "Transformer_Encoder_\(precision.suffix)",
             "Transformer_Decoder_\(precision.suffix)",
-            "HiFiGAN_Generator_\(precision.suffix)",
+            hifigan,
         ]
         var total: Int64 = 0
         for name in names {
