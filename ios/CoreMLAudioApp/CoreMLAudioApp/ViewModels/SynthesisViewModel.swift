@@ -120,7 +120,7 @@ final class SynthesisViewModel {
         progress = 0
         defer { isProcessing = false }
 
-        // Int8 や 未生成バリアントはここで弾く (ロード失敗より早く UI に伝える)
+        // 未生成バリアントはここで弾く (ロード失敗より早く UI に伝える)
         if !selectedShapeMode.isAvailable(for: selectedPrecision) {
             errorMessage = "\(selectedPrecision.rawValue) + \(selectedShapeMode.displayName) のモデルは生成されていません"
             status = "エラー"
@@ -232,7 +232,7 @@ final class SynthesisViewModel {
         progress = 1.0
     }
 
-    /// HiFi-GAN 7 モデル × 3 computeUnits を網羅的に試して結果を CSV に書き出す。
+    /// HiFi-GAN の shape バリアント × 3 computeUnits を網羅的に試して結果を CSV に書き出す。
     /// 結果は `Documents/Result/stability/vocoder_stability_<timestamp>.csv` に保存される。
     func runStabilityTest() async {
         errorMessage = nil

@@ -49,9 +49,14 @@ ALL_VARIANTS = [
     ("float32", "range16"),
     ("float32", "range16_384"),
     ("float32", "fixed262"),
+    ("float16", "range1"),
     ("float16", "range16"),
     ("float16", "range16_384"),
     ("float16", "fixed262"),
+    ("int8", "range1"),
+    ("int8", "range16"),
+    ("int8", "range16_384"),
+    ("int8", "fixed262"),
 ]
 
 
@@ -105,8 +110,8 @@ def quantize_int8(mlmodel):
 def build_input_shape(shape_mode):
     """shape_mode に応じた ct.TensorType の shape を返す"""
     if shape_mode is None:
-        # legacy: RangeDim(16, 1000, default=100)
-        return ct.Shape(shape=(1, 256, ct.RangeDim(16, 1000, default=100)))
+        # legacy: RangeDim(1, 1000, default=100)
+        return ct.Shape(shape=(1, 256, ct.RangeDim(1, 1000, default=100)))
 
     spec = SHAPE_MODES[shape_mode]
     if spec["kind"] == "range":
@@ -182,12 +187,12 @@ def main():
         "--shape-mode",
         choices=list(SHAPE_MODES.keys()),
         default=None,
-        help="入力 shape のバリアント。省略時は legacy 動作 (RangeDim 16-1000)",
+        help="入力 shape のバリアント。省略時は legacy 動作 (RangeDim 1-1000)",
     )
     parser.add_argument(
         "--all-variants",
         action="store_true",
-        help="Float32/Float16 × shape 4 種の計 7 パターンを一括生成",
+        help="Float32/Float16/Int8 × shape 4 種の計 12 パターンを一括生成",
     )
     args = parser.parse_args()
 

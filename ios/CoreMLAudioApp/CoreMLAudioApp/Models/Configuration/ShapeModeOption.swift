@@ -1,3 +1,5 @@
+import Foundation
+
 /// HiFi-GAN モデルの入力 shape バリアント
 ///
 /// 実機テストで判明した「広い RangeDim ＋ GPU 経路で `E5RT: No memory object bound to port`」を踏まえ、
@@ -9,7 +11,7 @@ enum ShapeModeOption: String, CaseIterable, Identifiable {
     case range16_384
     /// `RangeDim(16, 1000, default=100)`。GPU 経路で E5RT 失敗 (検証用)
     case range16
-    /// `RangeDim(1, 1000, default=100)`。Float32 のみ生成済み (検証用)
+    /// `RangeDim(1, 1000, default=100)`。shape 付きモデルが無い場合は legacy 命名モデルを使う。
     case range1
 
     var id: String { rawValue }
@@ -35,13 +37,37 @@ enum ShapeModeOption: String, CaseIterable, Identifiable {
         }
     }
 
-    /// 該当 precision でこの shape mode の mlpackage が生成されているか。
-    /// Int8 はバリアント未生成だが `AudioSynthesizer` 側で legacy mlpackage に
-    /// フォールバックするので、ここでは利用可能扱いにする (shape mode は無視される)。
+    /// 該当 precision でこの shape mode の HiFi-GAN mlmodelc が Bundle にあるか。
+    /// `range1` は旧来の `HiFiGAN_Generator_<precision>` も 1-1000 互換モデルとして許可する。
     func isAvailable(for precision: ModelPrecision) -> Bool {
-        if precision == .int8 { return true }  // Int8 は legacy にフォールバック
-        if precision == .float16 && self == .range1 { return false }  // Float16+range1 は未生成
-        return true
+        hifiganResourceName(for: precision) != nil
+    }
+
+    /// 選択 shape に対応する Bundle 内 HiFi-GAN リソース名を返す。
+    /// shape 付きモデルを優先し、`range1` だけ legacy 命名にフォールバックする。
+    func hifiganResourceName(for precision: ModelPrecision) -> String? {
+        let shapedName = "HiFiGAN_Generator_\(precision.suffix)_\(modelSuffix)"
+        if Bundle.main.url(forResource: shapedName, withExtension: "mlmodelc") != nil {
+            return shapedName
+        }
+
+        if self == .range1 {
+            let legacyName = "HiFiGAN_Generator_\(precision.suffix)"
+            if Bundle.main.url(forResource: legacyName, withExtension: "mlmodelc") != nil {
+                return legacyName
+            }
+        }
+
+        return nil
+    }
+
+    /// ロードしたリソース名に対応する表示・ログ用 shape ラベル。
+    func resolvedShapeLabel(for resourceName: String, precision: ModelPrecision) -> String {
+        let legacyName = "HiFiGAN_Generator_\(precision.suffix)"
+        if resourceName == legacyName {
+            return "legacy_range1_1000"
+        }
+        return modelSuffix
     }
 }
 

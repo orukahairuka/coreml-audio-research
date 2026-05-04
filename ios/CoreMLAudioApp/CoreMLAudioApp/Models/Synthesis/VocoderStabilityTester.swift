@@ -24,22 +24,25 @@ final class VocoderStabilityTester {
     struct Variant {
         let resourceName: String   // Bundle 内の .mlmodelc 名（拡張子なし）
         let precision: String      // "Float32" | "Float16" | "Int8"
-        let shapeMode: String      // "range1" | "range16" | "range16_384" | "fixed262" | "range16_1000" (legacy int8)
+        let shapeMode: String      // "range1" | "range16" | "range16_384" | "fixed262"
     }
 
-    /// `convert_hifigan.py --all-variants` で生成される 7 種類 + 既存 legacy Int8 = 8 モデル。
+    /// `convert_hifigan.py --all-variants` で生成される 12 種類のモデル。
+    /// (Float32 / Float16 / Int8 それぞれ range1 / range16 / range16_384 / fixed262)
     /// Bundle に追加されていないものは "model_missing" として記録する。
-    /// Int8 は今のところ legacy 命名 (RangeDim 16-1000) のみ存在するので、Int8 + GPU 経路 (.cpuAndGPU / .all) で
-    /// 実機が落ちないか / 出力が壊れないかを Float32/Float16 と同じ手順で確認する。
     static let variants: [Variant] = [
         .init(resourceName: "HiFiGAN_Generator_float32_range1",      precision: "Float32", shapeMode: "range1"),
         .init(resourceName: "HiFiGAN_Generator_float32_range16",     precision: "Float32", shapeMode: "range16"),
         .init(resourceName: "HiFiGAN_Generator_float32_range16_384", precision: "Float32", shapeMode: "range16_384"),
         .init(resourceName: "HiFiGAN_Generator_float32_fixed262",    precision: "Float32", shapeMode: "fixed262"),
+        .init(resourceName: "HiFiGAN_Generator_float16_range1",      precision: "Float16", shapeMode: "range1"),
         .init(resourceName: "HiFiGAN_Generator_float16_range16",     precision: "Float16", shapeMode: "range16"),
         .init(resourceName: "HiFiGAN_Generator_float16_range16_384", precision: "Float16", shapeMode: "range16_384"),
         .init(resourceName: "HiFiGAN_Generator_float16_fixed262",    precision: "Float16", shapeMode: "fixed262"),
-        .init(resourceName: "HiFiGAN_Generator_int8",                precision: "Int8",    shapeMode: "range16_1000"),
+        .init(resourceName: "HiFiGAN_Generator_int8_range1",         precision: "Int8",    shapeMode: "range1"),
+        .init(resourceName: "HiFiGAN_Generator_int8_range16",        precision: "Int8",    shapeMode: "range16"),
+        .init(resourceName: "HiFiGAN_Generator_int8_range16_384",    precision: "Int8",    shapeMode: "range16_384"),
+        .init(resourceName: "HiFiGAN_Generator_int8_fixed262",       precision: "Int8",    shapeMode: "fixed262"),
     ]
 
     static let computeUnitOptions: [(label: String, units: MLComputeUnits)] = [
