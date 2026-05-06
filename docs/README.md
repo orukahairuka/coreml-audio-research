@@ -22,6 +22,9 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-04-22 | [advisor-meeting-todo](2026-04-22/advisor-meeting-todo.md) | 先生相談後の持ち帰り TODO（Float32/GPU、HiFi-GAN 差し替え、比較指標、データ・文献） |
 | 2026-04-25 | [timing-measurement](2026-04-25/timing-measurement.md) | CoreML 各段の `predict()` 所要時間を計測する機構の実装メモ |
 | 2026-04-25 | [ui-test-loop-fixes](2026-04-25/ui-test-loop-fixes.md) | 12通りバッチ取得 XCUITest のフレーク対策3点（XCTFail 二重計上 / picker disabled 残留 / status ラベル即マッチ）の解説 |
+| 2026-04-27 | [quantization-pareto-baseline](2026-04-27/quantization-pareto-baseline.md) | 量子化 × 計算デバイス 12 通りのサイズ・速さ・mel 劣化を1表にしたシミュレータ計測ベースライン |
+| 2026-04-27 | [float32-gpu-accumulation-experiment](2026-04-27/float32-gpu-accumulation-experiment.md) | Float32 × GPU 出力飽和の原因切り分け：累積精度 fp32 強制 (`allowLowPrecisionAccumulationOnGPU = false`) では直らず仮説 1 否定、中間テンソル fp16 保持仮説も Apple 公式 Typed Execution と整合せず撤回。**原因未特定**で追加調査の方針を残した |
+| 2026-05-06 | [float32-gpu-investigation-summary](2026-05-06/float32-gpu-investigation-summary.md) | `feature/float32-gpu-investigation` ブランチ ([PR #15](https://github.com/orukahairuka/coreml-audio-research/pull/15)) の本文と 21 コミットの全体まとめ（計測機構 / 12 通りベースライン / Float32×GPU 飽和調査 / fixed262 採用） |
 
 ## トピック別
 
@@ -31,6 +34,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [hifigan-conversion](2026-03-21/hifigan-conversion.md)
 - [coreml-pipeline](2026-03-21/coreml-pipeline.md)
 - [float32-gpu-debug-report](2026-04-05/float32-gpu-debug-report.md)
+- [float32-gpu-accumulation-experiment](2026-04-27/float32-gpu-accumulation-experiment.md)
 
 ### iOS 実装
 
@@ -51,3 +55,11 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 
 - [research-plan](2026-04-22/research-plan.md)
 - [advisor-meeting-todo](2026-04-22/advisor-meeting-todo.md)
+
+### 計測・評価結果
+
+- [quantization-pareto-baseline](2026-04-27/quantization-pareto-baseline.md)
+
+### ブランチ・PR まとめ
+
+- [float32-gpu-investigation-summary](2026-05-06/float32-gpu-investigation-summary.md)

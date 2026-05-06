@@ -9,9 +9,11 @@ import CoreML
 /// CoreML の動的入力形状を使う。
 final class DecoderRunner {
     private let model: MLModel
+    private let policy: TransformerInputPolicy
 
-    init(model: MLModel) {
+    init(model: MLModel, policy: TransformerInputPolicy = .dynamic(maxT: 1000)) {
         self.model = model
+        self.policy = policy
     }
 
     /// Decoder を frameCount 回まわして自己回帰的に出力を生成する
@@ -34,17 +36,32 @@ final class DecoderRunner {
         var lastPostnetOut: MLMultiArray?
         var stepStats = [DecoderStepStats]()
         var totalPredictMs: Double = 0
+        let maxLength: Int
+        let fixedLength: Int?
+        switch policy {
+        case .fixed(let targetT):
+            maxLength = targetT
+            fixedLength = targetT
+        case .dynamic(let maxT):
+            maxLength = maxT
+            fixedLength = nil
+        }
+        let effectiveFrameCount = min(frameCount, maxLength)
+        if frameCount > maxLength {
+            print("[DecoderRunner] WARN: frameCount=\(frameCount) > maxLength=\(maxLength), cropped to \(effectiveFrameCount)")
+        }
 
-        for step in 0..<frameCount {
+        for step in 0..<effectiveFrameCount {
             // decoder_input: [1, currentLength, 256]
-            let decInput = try MLMultiArray(shape: [1, currentLength as NSNumber, nMels as NSNumber], dataType: .float32)
+            let inputLength = fixedLength ?? currentLength
+            let decInput = try MLMultiArray(shape: [1, inputLength as NSNumber, nMels as NSNumber], dataType: .float32)
             for i in 0..<(currentLength * nMels) {
                 decInput[i] = NSNumber(value: decoderInputData[i])
             }
 
             // pos: [1, currentLength]
-            let decPos = try MLMultiArray(shape: [1, currentLength as NSNumber], dataType: .int32)
-            for i in 0..<currentLength {
+            let decPos = try MLMultiArray(shape: [1, inputLength as NSNumber], dataType: .int32)
+            for i in 0..<inputLength {
                 decPos[i] = NSNumber(value: Int32(i + 1))
             }
 
@@ -71,8 +88,8 @@ final class DecoderRunner {
             let postStats = lastPostnetOut.map { ArrayStats.compute(from: $0) }
                 ?? ArrayStats(min: 0, max: 0, mean: 0, hasNaN: false, hasInf: false)
             let shouldRecord = step < 5
-                || step >= frameCount - 5
-                || (frameCount > 10 && step >= frameCount / 2 - 2 && step <= frameCount / 2 + 2)
+                || step >= effectiveFrameCount - 5
+                || (effectiveFrameCount > 10 && step >= effectiveFrameCount / 2 - 2 && step <= effectiveFrameCount / 2 + 2)
                 || melStats.hasNaN || melStats.hasInf
                 || postStats.hasNaN || postStats.hasInf
             if shouldRecord {

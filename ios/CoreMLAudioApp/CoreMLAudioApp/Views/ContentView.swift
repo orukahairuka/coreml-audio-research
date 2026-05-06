@@ -12,6 +12,7 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollView {
             VStack(spacing: 24) {
                 // ステータス表示
                 GroupBox("ステータス") {
@@ -38,6 +39,7 @@ struct ContentView: View {
                                     Text("サンプル音声")
                                     Spacer()
                                 }
+                                .contentShape(Rectangle())
                             }
                         )
                         .foregroundStyle(viewModel.audioSource == .bundledSample ? .primary : .secondary)
@@ -54,6 +56,7 @@ struct ContentView: View {
                                             .lineLimit(1)
                                         Spacer()
                                     }
+                                    .contentShape(Rectangle())
                                 }
                             )
                             .foregroundStyle(viewModel.audioSource == .recording(url) ? .primary : .secondary)
@@ -106,7 +109,8 @@ struct ContentView: View {
                 .disabled(viewModel.isProcessing)
                 .accessibilityIdentifier("precisionPicker")
 
-                // 計算デバイス選択
+                // 計算デバイス選択 (.menu を明示。default だと iOS 26 で .navigationLink になり
+                // Picker ↔ Picker のレンダリング順で選択がコミットされない事象があった)
                 Picker("計算デバイス", selection: $viewModel.selectedComputeUnit) {
                     ForEach(ComputeUnitOption.allCases) { option in
                         Text(option.displayName)
@@ -114,8 +118,21 @@ struct ContentView: View {
                             .accessibilityIdentifier("computeUnit.\(option.rawValue)")
                     }
                 }
+                .pickerStyle(.menu)
                 .disabled(viewModel.isProcessing)
                 .accessibilityIdentifier("computeUnitPicker")
+
+                // HiFi-GAN 入力 shape バリアント選択 (本番デフォルト: fixed262)
+                Picker("HiFi-GAN shape", selection: $viewModel.selectedShapeMode) {
+                    ForEach(ShapeModeOption.allCases) { option in
+                        Text(option.displayName)
+                            .tag(option)
+                            .accessibilityIdentifier("shapeMode.\(option.rawValue)")
+                    }
+                }
+                .pickerStyle(.menu)
+                .disabled(viewModel.isProcessing)
+                .accessibilityIdentifier("shapeModePicker")
 
                 // アクションボタン
                 VStack(spacing: 12) {
@@ -153,6 +170,60 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                 }
 
+                // HiFi-GAN 安定性テスト
+                Button(
+                    action: { Task { await viewModel.runStabilityTest() } },
+                    label: {
+                        Label("HiFi-GAN 安定性テスト", systemImage: "checklist")
+                            .frame(maxWidth: .infinity)
+                    }
+                )
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isProcessing || viewModel.isRecording)
+                .accessibilityIdentifier("stabilityTestButton")
+
+                if let summary = viewModel.stabilitySummary {
+                    GroupBox("安定性テスト結果") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(summary)
+                                .font(.caption)
+                            if let url = viewModel.stabilityCsvURL {
+                                Text("CSV: \(url.lastPathComponent)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                // F16 fixed262 cpuAndGPU vs all 出力差分テスト
+                Button(
+                    action: { Task { await viewModel.runVocoderDiffTest() } },
+                    label: {
+                        Label("F16 fixed262: cpuAndGPU ↔ all 差分", systemImage: "arrow.left.arrow.right.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                )
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isProcessing || viewModel.isRecording)
+                .accessibilityIdentifier("vocoderDiffTestButton")
+
+                if let summary = viewModel.diffSummary {
+                    GroupBox("出力差分テスト結果") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(summary)
+                                .font(.caption)
+                            if let url = viewModel.diffCsvURL {
+                                Text("CSV: \(url.lastPathComponent)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
                 // エラー表示
                 if let errorMessage = viewModel.errorMessage {
                     GroupBox {
@@ -168,6 +239,7 @@ struct ContentView: View {
                 GroupBox("情報") {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("モデル: PronounSE (\(viewModel.selectedPrecision.rawValue))")
+                        Text("HiFi-GAN shape: \(viewModel.selectedShapeMode.displayName)")
                         Text("計算デバイス: \(viewModel.selectedComputeUnit.displayName)")
                         Text("サンプルレート: 22050 Hz")
                         Text("入力: \(viewModel.audioSource.displayName)")
@@ -177,6 +249,7 @@ struct ContentView: View {
                 }
             }
             .padding()
+            }
             .navigationTitle("CoreML Audio")
         }
     }
