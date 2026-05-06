@@ -10,6 +10,7 @@
 import warnings
 warnings.simplefilter("ignore", FutureWarning)
 
+import hashlib
 import os
 import sys
 import json
@@ -109,15 +110,18 @@ def main():
         print(f"error: file not found: {input_wav}")
         sys.exit(1)
 
-    cache = os.path.join(PROJECT_ROOT, "result", "postnet_out_cache.npy")
+    # input_wav の絶対パスからキャッシュ名を派生させ、別ファイルを指定したときに
+    # 前回の postnet を使い回さないようにする。
+    cache_key = hashlib.sha256(os.path.realpath(input_wav).encode()).hexdigest()[:16]
+    cache = os.path.join(PROJECT_ROOT, "result", f"postnet_out_cache_{cache_key}.npy")
     os.makedirs(os.path.dirname(cache), exist_ok=True)
     if os.path.isfile(cache):
         postnet_out = np.load(cache)
-        print(f"キャッシュから読み込み: {cache}  shape={postnet_out.shape}")
+        print(f"キャッシュから読み込み: {cache}  (input={input_wav})  shape={postnet_out.shape}")
     else:
         postnet_out = get_postnet_out(input_wav)
         np.save(cache, postnet_out)
-        print(f"キャッシュ保存: {cache}")
+        print(f"キャッシュ保存: {cache}  (input={input_wav})")
 
     print("\n=== postnet_out (HiFi-GAN 入力) ===")
     stats("postnet_out", postnet_out)
