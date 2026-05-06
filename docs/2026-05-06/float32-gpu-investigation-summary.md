@@ -3,9 +3,9 @@
 `main` から 21 コミット先行している `feature/float32-gpu-investigation` ブランチで
 やったこと（計測機構整備 → 12 通りベースライン取得 → Float32 × GPU 飽和の原因調査
 → HiFi-GAN shape mode 検討 → 実機 GPU 経路の E5RT 回避策確定）の総まとめ。
-PR を立てるときの本文ベースとして使う。
+PR は [#15](https://github.com/orukahairuka/coreml-audio-research/pull/15) で立てた。
 
-## PR 草案
+## PR 本文
 
 ### タイトル
 
