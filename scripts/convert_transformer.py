@@ -154,8 +154,9 @@ def convert_encoder(model, precision, shape_mode=None):
         convert_to="mlprogram",
         compute_precision=get_compute_precision(precision),
         # 旧 opset の MLProgram は GPU/MPSGraph 経路で MLIR pass が abort することがある。
-        # HiFi-GAN と同じ iOS26 opset で変換し、GPU/ANE を含む実機検証条件を揃える。
-        minimum_deployment_target=ct.target.iOS26,
+        # HiFi-GAN と同じ iOS18 opset で変換し、GitHub Actions の Xcode 16.4
+        # (model version 9 まで対応) でも読める形にする。
+        minimum_deployment_target=ct.target.iOS18,
     )
 
     if precision == "int8":
@@ -220,8 +221,9 @@ def convert_decoder(model, precision, shape_mode=None):
         convert_to="mlprogram",
         compute_precision=get_compute_precision(precision),
         # 旧 opset の MLProgram は GPU/MPSGraph 経路で MLIR pass が abort することがある。
-        # HiFi-GAN と同じ iOS26 opset で変換し、GPU/ANE を含む実機検証条件を揃える。
-        minimum_deployment_target=ct.target.iOS26,
+        # HiFi-GAN と同じ iOS18 opset で変換し、GitHub Actions の Xcode 16.4
+        # (model version 9 まで対応) でも読める形にする。
+        minimum_deployment_target=ct.target.iOS18,
     )
 
     if precision == "int8":

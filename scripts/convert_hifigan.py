@@ -153,8 +153,9 @@ def convert_one(generator, precision, shape_mode):
         convert_to="mlprogram",
         compute_precision=get_compute_precision(precision),
         # 旧 opset (iOS15) のままだとシミュレータの MPSGraph で MLIR pass が
-        # 落ちて Float32 + GPU が abort する。最新 opset で再変換する
-        minimum_deployment_target=ct.target.iOS26,
+        # 落ちて Float32 + GPU が abort する。iOS18 まで上げれば MLIR pass は通り、
+        # GitHub Actions の Xcode 16.4 (model version 9 まで対応) でも読める。
+        minimum_deployment_target=ct.target.iOS18,
     )
 
     if precision == "int8":
