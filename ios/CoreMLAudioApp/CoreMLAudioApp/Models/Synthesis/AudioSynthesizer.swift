@@ -91,26 +91,39 @@ final class AudioSynthesizer {
         // 2. Encoder
         await MainActor.run { onProgress("Encoder 実行中...", 0.05) }
         let transformerPolicy = loadedTransformerPolicy ?? .dynamic(maxT: 1000)
+        // policy 上限を超える入力はここで先にクロップしておく。Encoder/Decoder それぞれが
+        // 内部で同じ min(frameCount, maxT/targetT) を持つが、外で先に確定しておかないと
+        // 後段（postnetOut のループや TimingInfo）が元の frameCount を読みに行って範囲外アクセスする。
+        let effectiveFrameCount: Int
+        switch transformerPolicy {
+        case .fixed(let targetT):
+            effectiveFrameCount = min(frameCount, targetT)
+        case .dynamic(let maxT):
+            effectiveFrameCount = min(frameCount, maxT)
+        }
+        if effectiveFrameCount < frameCount {
+            print("[AudioSynthesizer] WARN: frameCount=\(frameCount) > policy max, cropped to \(effectiveFrameCount)")
+        }
         let encoderRunner = EncoderRunner(model: encoder, policy: transformerPolicy)
-        let (memory, encoderMs) = try await encoderRunner.run(mel: melData, frameCount: frameCount, nMels: nMels)
+        let (memory, encoderMs) = try await encoderRunner.run(mel: melData, frameCount: effectiveFrameCount, nMels: nMels)
         let encoderStats = ArrayStats.compute(from: memory)
 
         // 3. Decoder (自己回帰ループ)
-        await MainActor.run { onProgress("Decoder 実行中... (0/\(frameCount))", 0.1) }
+        await MainActor.run { onProgress("Decoder 実行中... (0/\(effectiveFrameCount))", 0.1) }
         let decoderRunner = DecoderRunner(model: decoder, policy: transformerPolicy)
         let (postnetOut, decoderStepStats, decoderTotalMs) = try await decoderRunner.run(
             memory: memory,
-            frameCount: frameCount,
+            frameCount: effectiveFrameCount,
             nMels: nMels,
             onStep: { completed in
-                let progress = 0.1 + 0.8 * Double(completed) / Double(frameCount)
-                onProgress("Decoder 実行中... (\(completed)/\(frameCount))", progress)
+                let progress = 0.1 + 0.8 * Double(completed) / Double(effectiveFrameCount)
+                onProgress("Decoder 実行中... (\(completed)/\(effectiveFrameCount))", progress)
             }
         )
 
         // 4. HiFi-GAN
         await MainActor.run { onProgress("HiFi-GAN 実行中...", 0.9) }
-        let totalFrames = frameCount
+        let totalFrames = effectiveFrameCount
 
         // 入力統計は転置前の postnetOut で計算（min/max/mean/NaN/Inf は要素順に依存しないため転置後と同値）
         let hifiganInputStats = ArrayStats.compute(from: postnetOut)
@@ -179,7 +192,7 @@ final class AudioSynthesizer {
         let timing = TimingInfo(
             encoderMs: encoderMs,
             decoderTotalMs: decoderTotalMs,
-            decoderStepCount: frameCount,
+            decoderStepCount: effectiveFrameCount,
             hifiganMs: hifiganMs,
             outputDurationMs: outputDurationMs,
             modelSizeBytes: modelSizeBytes
