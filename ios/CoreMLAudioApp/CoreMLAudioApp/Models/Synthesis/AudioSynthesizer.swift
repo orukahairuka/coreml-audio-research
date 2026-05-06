@@ -10,9 +10,12 @@ final class AudioSynthesizer {
     private var loadedPrecision: ModelPrecision?
     private var loadedComputeUnits: MLComputeUnits?
     private var loadedShapeMode: ShapeModeOption?
+    private var loadedEncoderName: String?
+    private var loadedDecoderName: String?
     private var loadedHifiganName: String?
     private var loadedHifiganShapeLabel: String?
     private var loadedHifiganPolicy: VocoderInputPolicy?
+    private var loadedTransformerPolicy: TransformerInputPolicy?
 
     /// 指定精度・計算デバイス・shape mode で CoreML モデルをロードする
     /// （同じ設定でロード済みならスキップ）
@@ -26,8 +29,8 @@ final class AudioSynthesizer {
             return
         }
 
-        let encoderName = "Transformer_Encoder_\(precision.suffix)"
-        let decoderName = "Transformer_Decoder_\(precision.suffix)"
+        let encoderName = shapeMode.transformerEncoderResourceName(for: precision)
+        let decoderName = shapeMode.transformerDecoderResourceName(for: precision)
         guard let hifiganName = shapeMode.hifiganResourceName(for: precision) else {
             throw SynthesisError.modelNotFound(
                 precision: "\(precision.rawValue) + \(shapeMode.displayName)"
@@ -35,6 +38,7 @@ final class AudioSynthesizer {
         }
         let hifiganShapeLabel = shapeMode.resolvedShapeLabel(for: hifiganName, precision: precision)
         let hifiganPolicy = shapeMode.inputPolicy
+        let transformerPolicy = shapeMode.transformerInputPolicy
 
         guard let encoderURL = Bundle.main.url(forResource: encoderName, withExtension: "mlmodelc"),
               let decoderURL = Bundle.main.url(forResource: decoderName, withExtension: "mlmodelc"),
@@ -55,9 +59,12 @@ final class AudioSynthesizer {
         loadedPrecision = precision
         loadedComputeUnits = computeUnits
         loadedShapeMode = shapeMode
+        loadedEncoderName = encoderName
+        loadedDecoderName = decoderName
         loadedHifiganName = hifiganName
         loadedHifiganShapeLabel = hifiganShapeLabel
         loadedHifiganPolicy = hifiganPolicy
+        loadedTransformerPolicy = transformerPolicy
     }
 
     /// 入力音声 URL から合成を実行し、SynthesisResult を返す
@@ -83,13 +90,14 @@ final class AudioSynthesizer {
 
         // 2. Encoder
         await MainActor.run { onProgress("Encoder 実行中...", 0.05) }
-        let encoderRunner = EncoderRunner(model: encoder)
+        let transformerPolicy = loadedTransformerPolicy ?? .dynamic(maxT: 1000)
+        let encoderRunner = EncoderRunner(model: encoder, policy: transformerPolicy)
         let (memory, encoderMs) = try await encoderRunner.run(mel: melData, frameCount: frameCount, nMels: nMels)
         let encoderStats = ArrayStats.compute(from: memory)
 
         // 3. Decoder (自己回帰ループ)
         await MainActor.run { onProgress("Decoder 実行中... (0/\(frameCount))", 0.1) }
-        let decoderRunner = DecoderRunner(model: decoder)
+        let decoderRunner = DecoderRunner(model: decoder, policy: transformerPolicy)
         let (postnetOut, decoderStepStats, decoderTotalMs) = try await decoderRunner.run(
             memory: memory,
             frameCount: frameCount,
@@ -164,6 +172,8 @@ final class AudioSynthesizer {
         let outputDurationMs = Double(waveform.count) / AudioFeatureExtractor.sampleRate * 1000.0
         let modelSizeBytes = Self.computeModelSizeBytes(
             precision: precision,
+            encoderName: loadedEncoderName,
+            decoderName: loadedDecoderName,
             hifiganName: loadedHifiganName
         )
         let timing = TimingInfo(
@@ -192,10 +202,15 @@ final class AudioSynthesizer {
     }
 
     /// 指定 precision の Encoder / Decoder と、実際にロードした HiFi-GAN の .mlmodelc 合計バイト数を返す
-    private static func computeModelSizeBytes(precision: ModelPrecision, hifiganName: String?) -> Int64 {
+    private static func computeModelSizeBytes(
+        precision: ModelPrecision,
+        encoderName: String?,
+        decoderName: String?,
+        hifiganName: String?
+    ) -> Int64 {
         let names = [
-            "Transformer_Encoder_\(precision.suffix)",
-            "Transformer_Decoder_\(precision.suffix)",
+            encoderName ?? "Transformer_Encoder_\(precision.suffix)",
+            decoderName ?? "Transformer_Decoder_\(precision.suffix)",
             hifiganName ?? "HiFiGAN_Generator_\(precision.suffix)_fixed262",
         ]
         var total: Int64 = 0

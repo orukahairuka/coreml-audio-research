@@ -61,6 +61,33 @@ enum ShapeModeOption: String, CaseIterable, Identifiable {
         return nil
     }
 
+    func transformerEncoderResourceName(for precision: ModelPrecision) -> String {
+        transformerResourceName(prefix: "Transformer_Encoder", precision: precision)
+    }
+
+    func transformerDecoderResourceName(for precision: ModelPrecision) -> String {
+        transformerResourceName(prefix: "Transformer_Decoder", precision: precision)
+    }
+
+    var transformerInputPolicy: TransformerInputPolicy {
+        switch self {
+        case .fixed262:
+            return .fixed(targetT: 262)
+        case .range16_384:
+            return .dynamic(maxT: 384)
+        case .range16, .range1:
+            return .dynamic(maxT: 1000)
+        }
+    }
+
+    private func transformerResourceName(prefix: String, precision: ModelPrecision) -> String {
+        let shapedName = "\(prefix)_\(precision.suffix)_\(modelSuffix)"
+        if Bundle.main.url(forResource: shapedName, withExtension: "mlmodelc") != nil {
+            return shapedName
+        }
+        return "\(prefix)_\(precision.suffix)"
+    }
+
     /// ロードしたリソース名に対応する表示・ログ用 shape ラベル。
     func resolvedShapeLabel(for resourceName: String, precision: ModelPrecision) -> String {
         let legacyName = "HiFiGAN_Generator_\(precision.suffix)"
@@ -76,5 +103,10 @@ enum VocoderInputPolicy {
     /// 固定 shape モデル用: `totalFrames < targetT` なら zero-pad、`> targetT` なら crop
     case fixed(targetT: Int)
     /// 動的 shape モデル用: 実際の `totalFrames` をそのまま渡す。`> maxT` なら crop
+    case dynamic(maxT: Int)
+}
+
+enum TransformerInputPolicy {
+    case fixed(targetT: Int)
     case dynamic(maxT: Int)
 }

@@ -28,8 +28,16 @@ TRANSFORMER_CHKPT = os.path.join(
     PROJECT_ROOT, "PronounSE", "Transformer", "chkpt", "chkpt__20000.pth.tar"
 )
 
-def get_output_path(model_name, precision):
-    return os.path.join(PROJECT_ROOT, f"{model_name}_{precision}.mlpackage")
+SHAPE_MODES = {
+    "range1": {"kind": "range", "lower": 1, "upper": 1000, "default_src": 50, "default_trg": 30},
+    "fixed262": {"kind": "fixed", "size": 262},
+}
+
+
+def get_output_path(model_name, precision, shape_mode=None):
+    if shape_mode is None:
+        return os.path.join(PROJECT_ROOT, f"{model_name}_{precision}.mlpackage")
+    return os.path.join(PROJECT_ROOT, f"{model_name}_{precision}_{shape_mode}.mlpackage")
 
 
 class EncoderWrapper(torch.nn.Module):
@@ -82,14 +90,46 @@ def quantize_int8(mlmodel):
     return linear_quantize_weights(mlmodel, config=config)
 
 
-def convert_encoder(model, precision):
+def encoder_input_shapes(shape_mode, trace_t):
+    if shape_mode == "fixed262":
+        return (
+            (1, SHAPE_MODES[shape_mode]["size"], hp.n_mels),
+            (1, SHAPE_MODES[shape_mode]["size"]),
+        )
+
+    spec = SHAPE_MODES["range1"]
+    return (
+        ct.Shape(shape=(1, ct.RangeDim(spec["lower"], spec["upper"], default=trace_t), hp.n_mels)),
+        ct.Shape(shape=(1, ct.RangeDim(spec["lower"], spec["upper"], default=trace_t))),
+    )
+
+
+def decoder_input_shapes(shape_mode, trace_src, trace_trg):
+    if shape_mode == "fixed262":
+        fixed_t = SHAPE_MODES[shape_mode]["size"]
+        return (
+            (1, fixed_t, hp.hidden_size),
+            (1, fixed_t, hp.n_mels),
+            (1, fixed_t),
+        )
+
+    spec = SHAPE_MODES["range1"]
+    return (
+        ct.Shape(shape=(1, ct.RangeDim(spec["lower"], spec["upper"], default=trace_src), hp.hidden_size)),
+        ct.Shape(shape=(1, ct.RangeDim(spec["lower"], spec["upper"], default=trace_trg), hp.n_mels)),
+        ct.Shape(shape=(1, ct.RangeDim(spec["lower"], spec["upper"], default=trace_trg))),
+    )
+
+
+def convert_encoder(model, precision, shape_mode=None):
     """Encoder を CoreML に変換し、精度を比較する"""
-    print(f"=== Encoder 変換 ({precision}) ===")
+    label = f"{precision}" + (f" / {shape_mode}" if shape_mode else " (legacy range1)")
+    print(f"=== Encoder 変換 ({label}) ===")
     encoder = EncoderWrapper(model)
     encoder.eval()
 
     # ダミー入力: mel [1, T_src, 256], pos [1, T_src]
-    T_src = 50
+    T_src = 262 if shape_mode == "fixed262" else 50
     dummy_mel = torch.randn(1, T_src, hp.n_mels)
     dummy_pos = torch.arange(1, T_src + 1).unsqueeze(0)  # [1, T_src]
 
@@ -104,11 +144,12 @@ def convert_encoder(model, precision):
 
     # CoreML 変換
     print("CoreML 変換中...")
+    mel_shape, pos_shape = encoder_input_shapes(shape_mode, T_src)
     mlmodel = ct.convert(
         traced,
         inputs=[
-            ct.TensorType(name="mel", shape=ct.Shape(shape=(1, ct.RangeDim(1, 1000, default=T_src), hp.n_mels))),
-            ct.TensorType(name="pos", shape=ct.Shape(shape=(1, ct.RangeDim(1, 1000, default=T_src))), dtype=np.int32),
+            ct.TensorType(name="mel", shape=mel_shape),
+            ct.TensorType(name="pos", shape=pos_shape, dtype=np.int32),
         ],
         convert_to="mlprogram",
         compute_precision=get_compute_precision(precision),
@@ -121,7 +162,7 @@ def convert_encoder(model, precision):
         print("Int8 量子化中...")
         mlmodel = quantize_int8(mlmodel)
 
-    output_path = get_output_path("Transformer_Encoder", precision)
+    output_path = get_output_path("Transformer_Encoder", precision, shape_mode)
     mlmodel.save(output_path)
     print(f"保存完了: {output_path}")
 
@@ -140,15 +181,16 @@ def convert_encoder(model, precision):
     return mlmodel
 
 
-def convert_decoder(model, precision):
+def convert_decoder(model, precision, shape_mode=None):
     """Decoder を CoreML に変換し、精度を比較する"""
-    print(f"=== Decoder 変換 ({precision}) ===")
+    label = f"{precision}" + (f" / {shape_mode}" if shape_mode else " (legacy range1)")
+    print(f"=== Decoder 変換 ({label}) ===")
     decoder = DecoderWrapper(model)
     decoder.eval()
 
     # ダミー入力
-    T_src = 50
-    T_trg = 30
+    T_src = 262 if shape_mode == "fixed262" else 50
+    T_trg = 262 if shape_mode == "fixed262" else 30
     dummy_memory = torch.randn(1, T_src, hp.hidden_size)  # Encoder 出力
     dummy_dec_input = torch.randn(1, T_trg, hp.n_mels)
     dummy_pos = torch.arange(1, T_trg + 1).unsqueeze(0)
@@ -167,12 +209,13 @@ def convert_decoder(model, precision):
 
     # CoreML 変換
     print("CoreML 変換中...")
+    memory_shape, decoder_input_shape, pos_shape = decoder_input_shapes(shape_mode, T_src, T_trg)
     mlmodel = ct.convert(
         traced,
         inputs=[
-            ct.TensorType(name="memory", shape=ct.Shape(shape=(1, ct.RangeDim(1, 1000, default=T_src), hp.hidden_size))),
-            ct.TensorType(name="decoder_input", shape=ct.Shape(shape=(1, ct.RangeDim(1, 1000, default=T_trg), hp.n_mels))),
-            ct.TensorType(name="pos", shape=ct.Shape(shape=(1, ct.RangeDim(1, 1000, default=T_trg))), dtype=np.int32),
+            ct.TensorType(name="memory", shape=memory_shape),
+            ct.TensorType(name="decoder_input", shape=decoder_input_shape),
+            ct.TensorType(name="pos", shape=pos_shape, dtype=np.int32),
         ],
         convert_to="mlprogram",
         compute_precision=get_compute_precision(precision),
@@ -185,7 +228,7 @@ def convert_decoder(model, precision):
         print("Int8 量子化中...")
         mlmodel = quantize_int8(mlmodel)
 
-    output_path = get_output_path("Transformer_Decoder", precision)
+    output_path = get_output_path("Transformer_Decoder", precision, shape_mode)
     mlmodel.save(output_path)
     print(f"保存完了: {output_path}")
 
@@ -216,13 +259,19 @@ def main():
         choices=["float16", "float32", "int8"],
         default="float16",
     )
+    parser.add_argument(
+        "--shape-mode",
+        choices=list(SHAPE_MODES.keys()),
+        default=None,
+        help="Transformer 入力 shape。省略時は legacy RangeDim 1-1000",
+    )
     args = parser.parse_args()
 
     print(f"Transformer モデルをロード中... (精度: {args.precision})")
     model = load_model()
 
-    convert_encoder(model, args.precision)
-    convert_decoder(model, args.precision)
+    convert_encoder(model, args.precision, args.shape_mode)
+    convert_decoder(model, args.precision, args.shape_mode)
 
     print("完了")
 
