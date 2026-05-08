@@ -5,13 +5,19 @@
 #
 # 使い方:
 #   ./scripts/run_device_benchmark.sh                    # 接続中の iPhone を1台自動検出
-#   ./scripts/run_device_benchmark.sh --device <UDID>    # 明示指定
-#   ./scripts/run_device_benchmark.sh --device "iPhone (3)"
+#   ./scripts/run_device_benchmark.sh --device <名前|UDID|identifier>
 #
 # 前提:
 #   - Xcode 15+ (xcrun devicectl)
 #   - iPhone が USB 接続され Xcode と paired 済み
 #   - PronounSE/venv が用意済み (集計に使用)
+#
+# 補足:
+#   xcodebuild と devicectl は同じデバイスを別 ID 体系で扱う:
+#     - xcodebuild の id=  : iPhone のハードウェア UDID (例: 00008110-0008396C26C3401E)
+#     - devicectl の --device: CoreDevice identifier (例: 44D024A4-DF7F-...)
+#   両方が受けつける「デバイス名」(例: "iPhone (3)") に統一して指定する。
+#   --device に何を渡しても、内部で名前に正規化する。
 
 set -euo pipefail
 
@@ -45,41 +51,73 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-resolve_device() {
-    # devicectl list devices の出力を行ごとに走査し、
-    # 「connected」状態の最初の行を Identifier (UDID) と Name を返す。
-    # 出力形式: Name | Hostname | Identifier | State | Model
-    local output
-    output=$(xcrun devicectl list devices 2>/dev/null || true)
+# devicectl の JSON 出力からデバイス名を解決する。
+# 引数が空なら接続中 (tunnelState=connected) のデバイスを 1 台自動検出。
+# 引数があればそれを name / udid / identifier のいずれかに照合してデバイス名に正規化。
+resolve_device_name() {
+    local query="$1"
+    local tmp_json
+    tmp_json="$(mktemp)"
+    xcrun devicectl list devices --json-output "${tmp_json}" >/dev/null 2>&1 || true
+    /usr/bin/env python3 - "${query}" "${tmp_json}" <<'PY'
+import json
+import sys
 
-    awk '
-        /^[[:space:]]*$/ { next }
-        /^Name/ { next }
-        /^---/ { next }
-        # State 列に "connected" を含む最初の行を採用
-        /connected/ {
-            # Identifier は UUID 形式 (8-4-4-4-12)
-            for (i = 1; i <= NF; i++) {
-                if ($i ~ /^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$/) {
-                    print $i
-                    exit 0
-                }
-            }
-        }
-    ' <<<"${output}"
+query = sys.argv[1]
+path = sys.argv[2]
+try:
+    with open(path) as f:
+        data = json.load(f)
+except Exception:
+    sys.exit(1)
+
+devices = data.get("result", {}).get("devices", [])
+
+def is_connected(d):
+    return d.get("connectionProperties", {}).get("tunnelState") == "connected"
+
+def fields(d):
+    return {
+        "name": d.get("deviceProperties", {}).get("name", ""),
+        "udid": d.get("hardwareProperties", {}).get("udid", ""),
+        "identifier": d.get("identifier", ""),
+    }
+
+if query:
+    for d in devices:
+        f = fields(d)
+        if query in (f["name"], f["udid"], f["identifier"]):
+            print(f["name"])
+            sys.exit(0)
+    sys.exit(2)
+else:
+    connected = [d for d in devices if is_connected(d)]
+    if len(connected) == 1:
+        print(fields(connected[0])["name"])
+        sys.exit(0)
+    sys.exit(3)
+PY
+    local rc=$?
+    rm -f "${tmp_json}"
+    return ${rc}
 }
 
+DEVICE_NAME=""
 if [[ -z "${DEVICE_ARG}" ]]; then
-    DEVICE_ARG="$(resolve_device)"
-    if [[ -z "${DEVICE_ARG}" ]]; then
-        echo "エラー: 接続中の実機が見つかりません" >&2
-        echo "  USB 接続して xcrun devicectl list devices で connected と表示されることを確認してください" >&2
-        echo "  もしくは --device <UDID|名前> で明示指定してください" >&2
+    if ! DEVICE_NAME="$(resolve_device_name "")"; then
+        echo "エラー: 接続中の実機が 1 台に絞れません" >&2
+        echo "  xcrun devicectl list devices で connected 状態のデバイスを確認し、" >&2
+        echo "  --device <名前|UDID|identifier> で明示指定してください" >&2
         exit 1
     fi
-    echo "自動検出した device: ${DEVICE_ARG}"
+    echo "自動検出した device: ${DEVICE_NAME}"
 else
-    echo "指定された device: ${DEVICE_ARG}"
+    if ! DEVICE_NAME="$(resolve_device_name "${DEVICE_ARG}")"; then
+        echo "エラー: --device '${DEVICE_ARG}' に該当するデバイスが見つかりません" >&2
+        echo "  xcrun devicectl list devices で表示される Name / UDID / Identifier を渡してください" >&2
+        exit 1
+    fi
+    echo "指定された device: ${DEVICE_ARG} -> ${DEVICE_NAME}"
 fi
 
 echo ""
@@ -87,12 +125,12 @@ echo "===== 1/3: xcodebuild test (実機) ====="
 xcodebuild test \
     -project "${PROJECT}" \
     -scheme "${SCHEME}" \
-    -destination "platform=iOS,id=${DEVICE_ARG}" \
+    -destination "platform=iOS,name=${DEVICE_NAME}" \
     -only-testing:"${TEST_TARGET}"
 
 echo ""
 echo "===== 2/3: Documents/Result を吸い出し ====="
-"${EXTRACT_SCRIPT}" --device "${DEVICE_ARG}"
+"${EXTRACT_SCRIPT}" --device "${DEVICE_NAME}"
 
 echo ""
 echo "===== 3/3: メトリクス集計 ====="
