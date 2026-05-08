@@ -21,6 +21,9 @@ from scipy.io import wavfile
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WAV_DIR = os.path.join(REPO_ROOT, "result")
+INPUT_WAV = os.path.join(
+    REPO_ROOT, "ios", "CoreMLAudioApp", "CoreMLAudioApp", "Input", "input_sample.wav"
+)
 
 PRECISIONS = ["Float32", "Float16", "Int8"]
 DEVICES = ["cpuOnly", "cpuAndGPU", "cpuAndNE", "all"]
@@ -72,15 +75,32 @@ def show_one(filename: str, save_path=None) -> None:
 
 
 def show_grid(save_path=None) -> None:
+    # 1 行目: 入力波形 (最初の列のみ表示、残りは非表示)、
+    # 2 行目以降: 出力波形 (3 精度 × 4 デバイス)
     fig, axes = plt.subplots(
-        len(PRECISIONS),
+        len(PRECISIONS) + 1,
         len(DEVICES),
-        figsize=(16, 7),
-        sharex=True,
+        figsize=(16, 9),
+        sharex=False,  # 入力と出力で長さが違いうるので X 軸は揃えない
         sharey=True,
     )
 
-    for i, prec in enumerate(PRECISIONS):
+    # 1 行目: 入力波形
+    if os.path.isfile(INPUT_WAV):
+        rate, data = _load_wav(INPUT_WAV)
+        t = np.arange(len(data)) / rate
+        axes[0, 0].plot(t, data, linewidth=0.4)
+        axes[0, 0].set_title("input", fontsize=10)
+        axes[0, 0].set_ylabel("amplitude")
+        axes[0, 0].grid(True, alpha=0.3)
+        for j in range(1, len(DEVICES)):
+            axes[0, j].axis("off")
+    else:
+        for j in range(len(DEVICES)):
+            axes[0, j].axis("off")
+
+    # 2 行目以降: 出力波形
+    for i, prec in enumerate(PRECISIONS, start=1):
         for j, dev in enumerate(DEVICES):
             ax = axes[i, j]
             path = os.path.join(WAV_DIR, f"output_{prec}_{dev}.wav")
@@ -92,7 +112,7 @@ def show_grid(save_path=None) -> None:
             ax.plot(t, data, linewidth=0.4)
             ax.set_title(f"{prec} / {dev}", fontsize=9)
             ax.grid(True, alpha=0.3)
-            if i == len(PRECISIONS) - 1:
+            if i == len(PRECISIONS):
                 ax.set_xlabel("time (s)")
             if j == 0:
                 ax.set_ylabel("amplitude")
