@@ -28,6 +28,8 @@ TEST_TARGET="CoreMLAudioAppUITests/CoreMLAudioAppUITests/testCaptureAllCombinati
 PYTHON="${REPO_ROOT}/PronounSE/venv/bin/python"
 EXTRACT_SCRIPT="${REPO_ROOT}/scripts/extract_ui_test_results.sh"
 AGGREGATE_SCRIPT="${REPO_ROOT}/scripts/aggregate_metrics.py"
+VIEW_MEL_SCRIPT="${REPO_ROOT}/scripts/view_mel.py"
+VIEW_WAVEFORM_SCRIPT="${REPO_ROOT}/scripts/view_waveform.py"
 
 DEVICE_ARG=""
 while [[ $# -gt 0 ]]; do
@@ -133,15 +135,24 @@ echo "===== 2/3: Documents/Result を吸い出し ====="
 "${EXTRACT_SCRIPT}" --device "${DEVICE_NAME}"
 
 echo ""
-echo "===== 3/3: メトリクス集計 ====="
+echo "===== 3/4: メトリクス集計 ====="
 if [[ ! -x "${PYTHON}" ]]; then
-    echo "警告: ${PYTHON} が見つかりません。集計はスキップします。" >&2
-    echo "      手動で aggregate_metrics.py を回してください。" >&2
+    echo "警告: ${PYTHON} が見つかりません。集計と図生成はスキップします。" >&2
+    echo "      手動で aggregate_metrics.py / view_mel.py / view_waveform.py を回してください。" >&2
     exit 0
 fi
-# CSV は result/ の外 (metrics/) にタイムスタンプ付きで保存。
-# result/ は次回の extract で rsync --delete されるが metrics/ は残る。
+# CSV と PNG は result/ の外 (metrics/, figures/) にタイムスタンプ付きで保存。
+# result/ は次回の extract で rsync --delete されるが metrics/ figures/ は残る。
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 DEVICE_SLUG="$(printf '%s' "${DEVICE_NAME}" | tr ' ()' '___' | tr -s '_' | sed 's/_$//')"
 CSV_PATH="${REPO_ROOT}/metrics/metrics_${DEVICE_SLUG}_${TIMESTAMP}.csv"
+FIGURE_DIR="${REPO_ROOT}/figures/${DEVICE_SLUG}_${TIMESTAMP}"
 "${PYTHON}" "${AGGREGATE_SCRIPT}" --csv "${CSV_PATH}"
+
+echo ""
+echo "===== 4/4: 図 (mel スペクトログラム / 波形) を生成 ====="
+mkdir -p "${FIGURE_DIR}"
+"${PYTHON}" "${VIEW_MEL_SCRIPT}" --save "${FIGURE_DIR}/mel_grid.png" >/dev/null
+"${PYTHON}" "${VIEW_WAVEFORM_SCRIPT}" --save "${FIGURE_DIR}/waveform_grid.png" >/dev/null
+echo "保存先: ${FIGURE_DIR}"
+ls -la "${FIGURE_DIR}"

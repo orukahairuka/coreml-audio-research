@@ -4,10 +4,14 @@
     # 全12通りを1枚のグリッドで表示
     PronounSE/venv/bin/python scripts/view_mel.py
 
+    # 全12通りを PNG に保存 (figures/ 配下推奨)
+    PronounSE/venv/bin/python scripts/view_mel.py --save figures/mel_grid.png
+
     # 特定の1ファイルだけ詳しく見る
     PronounSE/venv/bin/python scripts/view_mel.py output_mel_Float16_cpuAndGPU.npy
 """
 
+import argparse
 import os
 import sys
 
@@ -17,7 +21,16 @@ import matplotlib.pyplot as plt
 MEL_DIR = os.path.join(os.path.dirname(__file__), os.pardir, "result", "mel")
 
 
-def show_one(filename: str) -> None:
+def _finalize(save_path):
+    if save_path:
+        os.makedirs(os.path.dirname(save_path) or ".", exist_ok=True)
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
+        print(f"保存しました: {save_path}")
+    else:
+        plt.show()
+
+
+def show_one(filename: str, save_path=None) -> None:
     """1ファイルを詳しく表示する"""
     path = os.path.join(MEL_DIR, filename)
     if not os.path.isfile(path):
@@ -38,10 +51,10 @@ def show_one(filename: str) -> None:
     ax.set_ylabel("mel bin")
     plt.colorbar(im, ax=ax, label="dB")
     plt.tight_layout()
-    plt.show()
+    _finalize(save_path)
 
 
-def show_grid() -> None:
+def show_grid(save_path=None) -> None:
     """全12通り + 入力 を1枚のグリッドで表示"""
     precisions = ["Float32", "Float16", "Int8"]
     devices = ["cpuOnly", "cpuAndGPU", "cpuAndNE", "all"]
@@ -80,21 +93,36 @@ def show_grid() -> None:
                 ax.set_ylabel("mel bin")
 
     plt.tight_layout()
-    plt.show()
+    _finalize(save_path)
 
 
 def main() -> None:
-    if len(sys.argv) > 1:
-        show_one(sys.argv[1])
+    parser = argparse.ArgumentParser(description="result/mel/ を可視化")
+    parser.add_argument(
+        "filename",
+        nargs="?",
+        help="特定の .npy ファイルだけ表示 (省略時は 12 通りグリッド)",
+    )
+    parser.add_argument(
+        "--save",
+        metavar="PATH",
+        help="表示せず PNG に保存する出力パス",
+    )
+    args = parser.parse_args()
+
+    if args.filename:
+        show_one(args.filename, save_path=args.save)
     else:
-        # 引数なし: グリッドで全部見せる
         files = sorted(f for f in os.listdir(MEL_DIR) if f.endswith(".npy"))
         print(f"{MEL_DIR} に {len(files)} 個の .npy ファイルがあります:")
         for f in files:
             print(f"  {f}")
         print()
-        print("全12通り + 入力メル を並べて表示します (matplotlib ウィンドウ)...")
-        show_grid()
+        if args.save:
+            print(f"全12通り + 入力メル をグリッドで {args.save} に保存します...")
+        else:
+            print("全12通り + 入力メル を並べて表示します (matplotlib ウィンドウ)...")
+        show_grid(save_path=args.save)
 
 
 if __name__ == "__main__":
