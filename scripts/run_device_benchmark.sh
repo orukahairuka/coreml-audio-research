@@ -139,4 +139,9 @@ if [[ ! -x "${PYTHON}" ]]; then
     echo "      手動で aggregate_metrics.py を回してください。" >&2
     exit 0
 fi
-"${PYTHON}" "${AGGREGATE_SCRIPT}"
+# CSV は result/ の外 (metrics/) にタイムスタンプ付きで保存。
+# result/ は次回の extract で rsync --delete されるが metrics/ は残る。
+TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+DEVICE_SLUG="$(printf '%s' "${DEVICE_NAME}" | tr ' ()' '___' | tr -s '_' | sed 's/_$//')"
+CSV_PATH="${REPO_ROOT}/metrics/metrics_${DEVICE_SLUG}_${TIMESTAMP}.csv"
+"${PYTHON}" "${AGGREGATE_SCRIPT}" --csv "${CSV_PATH}"
