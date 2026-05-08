@@ -52,6 +52,8 @@ extract_from_device() {
     echo "bundle: ${BUNDLE_ID}"
     echo "fetching /Documents/Result -> ${tmp_root}"
 
+    # devicectl は --source ディレクトリの中身を --destination 直下に展開する
+    # (Result/ ラッパーは作らない) ので tmp_root をそのまま src として扱う。
     xcrun devicectl device copy from \
         --device "${DEVICE}" \
         --domain-type appDataContainer \
@@ -59,7 +61,7 @@ extract_from_device() {
         --source /Documents/Result \
         --destination "${tmp_root}"
 
-    local src_dir="${tmp_root}/Result"
+    local src_dir="${tmp_root}"
     if [[ ! -d "${src_dir}/mel" || ! -d "${src_dir}/timing" ]]; then
         echo "エラー: 取得したコンテナに mel/ と timing/ が揃っていません" >&2
         echo "  実機で XCUITest (testCaptureAllCombinations) を完走させてから再実行してください" >&2
