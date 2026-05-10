@@ -27,6 +27,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-05-06 | [float32-gpu-investigation-summary](2026-05-06/float32-gpu-investigation-summary.md) | `feature/float32-gpu-investigation` ブランチ ([PR #15](https://github.com/orukahairuka/coreml-audio-research/pull/15)) の本文と 21 コミットの全体まとめ（計測機構 / 12 通りベースライン / Float32×GPU 飽和調査 / fixed262 採用） |
 | 2026-05-07 | [hirai-comment-memory-management](2026-05-07/hirai-comment-memory-management.md) | RangeDim+GPU の E5RT 問題に関する平井先生 Slack コメントの解釈メモ（動的メモリ確保の観点、先生の 3 つの意図整理、section 3/4 との接続） |
 | 2026-05-08 | [device-benchmark-workflow](2026-05-08/device-benchmark-workflow.md) | iPhone 実機で 12 通り計測を 1 コマンドで完走させるワークフロー（`run_device_benchmark.sh`、`xcrun devicectl` 経由のファイル吸い出し） |
+| 2026-05-10 | [research-direction](2026-05-10/research-direction.md) | `/grill-me` セッションを通じた卒研方針の整理。研究目標・公知化する 5 貢献・章立て・採用したアプリスコープ・採用しなかった案の理由・次に決めること |
 
 ## トピック別
 
@@ -58,6 +59,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 
 - [research-plan](2026-04-22/research-plan.md)
 - [advisor-meeting-todo](2026-04-22/advisor-meeting-todo.md)
+- [research-direction](2026-05-10/research-direction.md)
 - [hirai-comment-memory-management](2026-05-07/hirai-comment-memory-management.md)
 
 ### 計測・評価結果
