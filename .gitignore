@@ -4,6 +4,8 @@ venv/
 !**/[Rr]esult/.gitkeep
 **/Input/*
 !**/Input/input_sample.wav
+metrics/
+figures/
 .DS_Store
 
 # Xcode

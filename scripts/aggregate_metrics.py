@@ -2,6 +2,7 @@
 
 使い方:
     PronounSE/venv/bin/python scripts/aggregate_metrics.py
+    PronounSE/venv/bin/python scripts/aggregate_metrics.py --csv result/metrics.csv
 
 前提:
     - scripts/extract_ui_test_results.sh を実行済みで result/timing/ と result/mel/ が揃っていること
@@ -10,8 +11,11 @@
 出力:
     Precision × ComputeUnit 12 通りの表を標準出力に書き出す。
     速さ (totalMs / RTF / decoder per-step ms) ・サイズ (modelMB) ・音質 (mel L1/L2 vs Float32_cpuOnly) の3軸。
+    --csv を指定すると同じ内容を CSV ファイルにも書き出す。
 """
 
+import argparse
+import csv
 import glob
 import json
 import os
@@ -56,7 +60,39 @@ def mel_diff(mel: np.ndarray, baseline: np.ndarray) -> Tuple[float, float, float
     return l1, l2, cos
 
 
+CSV_FIELDS = [
+    "precision",
+    "computeUnit",
+    "totalMs",
+    "rtf",
+    "decAvgMs",
+    "modelMB",
+    "melL1",
+    "melL2",
+    "melCos",
+]
+
+
+def write_csv(rows: list, path: str) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({k: row.get(k, "") for k in CSV_FIELDS})
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="result/ 配下の timing/mel から 12 通りの指標表を作る",
+    )
+    parser.add_argument(
+        "--csv",
+        metavar="PATH",
+        help="集計結果を CSV で書き出すパス (例: result/metrics.csv)",
+    )
+    args = parser.parse_args()
+
     timing_files = sorted(glob.glob(os.path.join(TIMING_DIR, "timing_*.json")))
     if not timing_files:
         print(f"timing JSON が見つかりません: {TIMING_DIR}", file=sys.stderr)
@@ -125,6 +161,10 @@ def main() -> int:
             f"{r['modelMB']:>8.1f} "
             f"{r['melL1']:>7.3f} {r['melL2']:>7.3f} {r['melCos']:>7.4f}"
         )
+
+    if args.csv:
+        write_csv(rows, args.csv)
+        print(f"\nCSV を保存しました: {args.csv}")
     return 0
 
 
