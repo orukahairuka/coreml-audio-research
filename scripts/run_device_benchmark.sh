@@ -123,7 +123,7 @@ else
 fi
 
 echo ""
-echo "===== 1/3: xcodebuild test (実機) ====="
+echo "===== 1/4: xcodebuild test (実機) ====="
 xcodebuild test \
     -project "${PROJECT}" \
     -scheme "${SCHEME}" \
@@ -131,7 +131,7 @@ xcodebuild test \
     -only-testing:"${TEST_TARGET}"
 
 echo ""
-echo "===== 2/3: Documents/Result を吸い出し ====="
+echo "===== 2/4: Documents/Result を吸い出し ====="
 "${EXTRACT_SCRIPT}" --device "${DEVICE_NAME}"
 
 echo ""
