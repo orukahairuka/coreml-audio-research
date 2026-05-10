@@ -46,7 +46,9 @@ extract_from_device() {
     # その中身を DEST_DIR に rsync で複製する。
     local tmp_root
     tmp_root="$(mktemp -d)"
-    trap 'rm -rf "${tmp_root}"' RETURN
+    # set -e や exit による早期終了でも tmp を残さないため EXIT トラップで掃除する
+    # (RETURN だと function 内の exit / set -e で発火しない)
+    trap "rm -rf '${tmp_root}'" EXIT
 
     echo "device: ${DEVICE}"
     echo "bundle: ${BUNDLE_ID}"
