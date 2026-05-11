@@ -135,24 +135,37 @@ echo "===== 2/4: Documents/Result を吸い出し ====="
 "${EXTRACT_SCRIPT}" --device "${DEVICE_NAME}"
 
 echo ""
-echo "===== 3/4: メトリクス集計 ====="
+echo "===== 3/5: メトリクス集計 ====="
 if [[ ! -x "${PYTHON}" ]]; then
-    echo "警告: ${PYTHON} が見つかりません。集計と図生成はスキップします。" >&2
+    echo "警告: ${PYTHON} が見つかりません。集計・図生成・音声アーカイブはスキップします。" >&2
     echo "      手動で aggregate_metrics.py / view_mel.py / view_waveform.py を回してください。" >&2
     exit 0
 fi
-# CSV と PNG は result/ の外 (metrics/, figures/) にタイムスタンプ付きで保存。
-# result/ は次回の extract で rsync --delete されるが metrics/ figures/ は残る。
+# CSV / PNG / WAV は result/ の外 (metrics/, figures/, audio/) にタイムスタンプ付きで保存。
+# result/ は次回の extract で rsync --delete されるが metrics/ figures/ audio/ は残る。
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
 DEVICE_SLUG="$(printf '%s' "${DEVICE_NAME}" | tr ' ()' '___' | tr -s '_' | sed 's/_$//')"
 CSV_PATH="${REPO_ROOT}/metrics/metrics_${DEVICE_SLUG}_${TIMESTAMP}.csv"
 FIGURE_DIR="${REPO_ROOT}/figures/${DEVICE_SLUG}_${TIMESTAMP}"
+AUDIO_DIR="${REPO_ROOT}/audio/${DEVICE_SLUG}_${TIMESTAMP}"
 "${PYTHON}" "${AGGREGATE_SCRIPT}" --csv "${CSV_PATH}"
 
 echo ""
-echo "===== 4/4: 図 (mel スペクトログラム / 波形) を生成 ====="
+echo "===== 4/5: 図 (mel スペクトログラム / 波形) を生成 ====="
 mkdir -p "${FIGURE_DIR}"
 "${PYTHON}" "${VIEW_MEL_SCRIPT}" --save "${FIGURE_DIR}/mel_grid.png" >/dev/null
 "${PYTHON}" "${VIEW_WAVEFORM_SCRIPT}" --save "${FIGURE_DIR}/waveform_grid.png" >/dev/null
 echo "保存先: ${FIGURE_DIR}"
 ls -la "${FIGURE_DIR}"
+
+echo ""
+echo "===== 5/5: 12 通り wav を audio/ にアーカイブ ====="
+mkdir -p "${AUDIO_DIR}"
+# 12 通り (Float32/Float16/Int8 × cpuOnly/cpuAndGPU/cpuAndNE/all) のみ。
+# result/ にある旧タイムスタンプ wav (output_YYYYMMDD_*.wav) はアーカイブ対象外。
+cp "${REPO_ROOT}"/result/output_Float32_*.wav \
+   "${REPO_ROOT}"/result/output_Float16_*.wav \
+   "${REPO_ROOT}"/result/output_Int8_*.wav \
+   "${AUDIO_DIR}/" 2>/dev/null || true
+echo "保存先: ${AUDIO_DIR}"
+ls -la "${AUDIO_DIR}"

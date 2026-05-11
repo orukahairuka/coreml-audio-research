@@ -6,6 +6,7 @@ venv/
 !**/Input/input_sample.wav
 metrics/
 figures/
+audio/
 .DS_Store
 
 # Xcode

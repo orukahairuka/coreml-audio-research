@@ -32,14 +32,15 @@ iPhone 実機で `testCaptureAllCombinations` を走らせて、12 通り（Floa
 | `metrics/metrics_<デバイス>_<日時>.csv` | Precision × ComputeUnit の 9 列 CSV | **残る**（履歴蓄積） |
 | `figures/<デバイス>_<日時>/mel_grid.png` | 入力 + 12 通り mel のグリッド画像 | **残る** |
 | `figures/<デバイス>_<日時>/waveform_grid.png` | 入力 + 12 通り振幅波形のグリッド画像 | **残る** |
+| `audio/<デバイス>_<日時>/output_*.wav` | 12 通りの実機合成 wav（聴き比べ用にアーカイブ） | **残る** |
 
-`metrics/` と `figures/` は `.gitignore` 対象（生計測データ・派生物のため）。レポートに貼るときは手動でコピー。
+`metrics/` `figures/` `audio/` は `.gitignore` 対象（生計測データ・派生物のため）。レポートに貼るときは手動でコピー。
 
 ## 内部で何が起きるか
 
-`run_device_benchmark.sh` は次の 4 ステップを順に叩く：
+`run_device_benchmark.sh` は次の 5 ステップを順に叩く：
 
-### 1/4. `xcodebuild test` で XCUITest を実機実行
+### 1/5. `xcodebuild test` で XCUITest を実機実行
 
 ```bash
 xcodebuild test \
@@ -51,7 +52,7 @@ xcodebuild test \
 
 `platform=iOS` ＝ 実機（シミュレータなら `platform=iOS Simulator`）。`testCaptureAllCombinations` は既存の XCUITest で、12 通りの精度 × 計算デバイスを順番に切り替えて合成し、各回 timing JSON / mel npy / wav を `Documents/Result/` に書き出す。
 
-### 2/4. `xcrun devicectl device copy from` で実機からファイル吸い出し
+### 2/5. `xcrun devicectl device copy from` で実機からファイル吸い出し
 
 ```bash
 xcrun devicectl device copy from \
@@ -64,7 +65,7 @@ xcrun devicectl device copy from \
 
 Xcode 15+ で導入された `devicectl` の機能。シミュレータ用の `xcrun simctl get_app_container` の実機版に相当する。`appDataContainer` ＝ アプリのサンドボックスの `Documents/` ルート。一時ディレクトリに落としたあと、`rsync -av --delete` で `result/` に複製する。
 
-### 3/4. `aggregate_metrics.py --csv` で集計＋ CSV 保存
+### 3/5. `aggregate_metrics.py --csv` で集計＋ CSV 保存
 
 ```bash
 PronounSE/venv/bin/python scripts/aggregate_metrics.py \
@@ -75,7 +76,7 @@ PronounSE/venv/bin/python scripts/aggregate_metrics.py \
 
 CSV の列：`precision, computeUnit, totalMs, rtf, decAvgMs, modelMB, melL1, melL2, melCos`。
 
-### 4/4. `view_mel.py` / `view_waveform.py` で図を生成
+### 4/5. `view_mel.py` / `view_waveform.py` で図を生成
 
 ```bash
 PronounSE/venv/bin/python scripts/view_mel.py      --save figures/<dir>/mel_grid.png
@@ -83,6 +84,15 @@ PronounSE/venv/bin/python scripts/view_waveform.py --save figures/<dir>/waveform
 ```
 
 それぞれ `result/mel/*.npy` と `result/output_*.wav` から **入力 + 12 通り** をグリッドで描画して PNG 保存する。レイアウトは 4 行 × 4 列：1 行目に入力、2〜4 行目に 3 精度 × 4 デバイス。
+
+### 5/5. 12 通り wav を `audio/<デバイス>_<日時>/` にアーカイブ
+
+```bash
+cp result/output_Float32_*.wav result/output_Float16_*.wav result/output_Int8_*.wav \
+   audio/<デバイス>_<日時>/
+```
+
+`result/` は次回 extract で上書きされて wav が消えるため、聴き比べ用に `audio/` 配下にタイムスタンプ付きで残す。`output_YYYYMMDD_*.wav`（旧手動合成の残骸）はアーカイブ対象外。
 
 ## 個別スクリプトの使い方
 
