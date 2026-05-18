@@ -28,6 +28,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-05-07 | [hirai-comment-memory-management](2026-05-07/hirai-comment-memory-management.md) | RangeDim+GPU の E5RT 問題に関する平井先生 Slack コメントの解釈メモ（動的メモリ確保の観点、先生の 3 つの意図整理、section 3/4 との接続） |
 | 2026-05-08 | [device-benchmark-workflow](2026-05-08/device-benchmark-workflow.md) | iPhone 実機で 12 通り計測を 1 コマンドで完走させるワークフロー（`run_device_benchmark.sh`、`xcrun devicectl` 経由のファイル吸い出し） |
 | 2026-05-10 | [research-direction](2026-05-10/research-direction.md) | `/grill-me` セッションを通じた卒研方針の整理。研究目標・公知化する 5 貢献・章立て・採用したアプリスコープ・採用しなかった案の理由・次に決めること |
+| 2026-05-17 | [fp32-cpuandgpu-quiet-vs-loud-investigation](2026-05-17/fp32-cpuandgpu-quiet-vs-loud-investigation.md) | XCUITest 経由だと F32 × cpuAndGPU が quiet（rms 400-728）、手動操作だと loud（rms 5029、決定論的）の調査メモ。playback-wait race 修正、順序効果（cpuAndGPU を先頭にすると後続 cpuOnly/cpuAndNE/all が loud に化ける）、未確定の論点を中間まとめ |
 
 ## トピック別
 
@@ -38,6 +39,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [coreml-pipeline](2026-03-21/coreml-pipeline.md)
 - [float32-gpu-debug-report](2026-04-05/float32-gpu-debug-report.md)
 - [float32-gpu-accumulation-experiment](2026-04-27/float32-gpu-accumulation-experiment.md)
+- [fp32-cpuandgpu-quiet-vs-loud-investigation](2026-05-17/fp32-cpuandgpu-quiet-vs-loud-investigation.md)
 
 ### iOS 実装
 
