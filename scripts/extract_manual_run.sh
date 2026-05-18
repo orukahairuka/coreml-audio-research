@@ -97,5 +97,9 @@ fi
 if [[ -d "${REPO_ROOT}/result/timing" ]]; then
     cp -R "${REPO_ROOT}/result/timing" "${DEST_DIR}/"
 fi
+# debug/ は CMLA_DEBUG_SNAPSHOT=1 のテスト用 (本番ランでは存在しないので skip OK)
+if [[ -d "${REPO_ROOT}/result/debug" ]]; then
+    cp -R "${REPO_ROOT}/result/debug" "${DEST_DIR}/"
+fi
 echo "保存先: ${DEST_DIR}"
 ls -la "${DEST_DIR}"

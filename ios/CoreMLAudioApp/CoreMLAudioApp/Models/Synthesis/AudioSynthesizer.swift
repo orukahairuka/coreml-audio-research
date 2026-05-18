@@ -88,6 +88,24 @@ final class AudioSynthesizer {
         let inputDisplayMel = try AudioFeatureExtractor.melSpectrogramForDisplay(from: inputURL)
         let nMels = AudioFeatureExtractor.nMels
 
+        // 調査用 snapshot (本番無効。CMLA_DEBUG_SNAPSHOT=1 のときだけ作られる)
+        let debug = DebugRunSnapshot.makeIfEnabled(
+            precision: precision.rawValue,
+            computeUnit: computeUnit.rawValue
+        )
+        debug?.writeContext(
+            precision: precision.rawValue,
+            computeUnit: computeUnit.rawValue,
+            shapeMode: loadedShapeMode?.rawValue ?? "?",
+            inputURL: inputURL
+        )
+        debug?.writeFloat2D(
+            name: "mel_normalized",
+            data: melData,
+            rows: frameCount,
+            cols: nMels
+        )
+
         // 2. Encoder
         await MainActor.run { onProgress("Encoder 実行中...", 0.05) }
         let transformerPolicy = loadedTransformerPolicy ?? .dynamic(maxT: 1000)
@@ -108,6 +126,24 @@ final class AudioSynthesizer {
         let (memory, encoderMs) = try await encoderRunner.run(mel: melData, frameCount: effectiveFrameCount, nMels: nMels)
         let encoderStats = ArrayStats.compute(from: memory)
 
+        // 調査用: Encoder 出力 (memory) を [T_src × hidden] で書き出す。
+        // shape は MLMultiArray.shape を見て決める。
+        if let debug = debug {
+            let shape = memory.shape.map { $0.intValue }
+            if shape.count == 3 {
+                // [1, T, hidden] を 2D 化
+                debug.writeMlArray(
+                    name: "encoder_output",
+                    array: memory,
+                    outerDim: shape[1],
+                    innerDim: shape[2]
+                )
+            } else {
+                debug.appendSummaryLine("encoder_output: unexpected shape=\(shape) — skipped npy")
+            }
+            debug.appendSummaryLine(String(format: "encoder_stats: \(encoderStats.summary) predict_ms=%.3f", encoderMs))
+        }
+
         // 3. Decoder (自己回帰ループ)
         await MainActor.run { onProgress("Decoder 実行中... (0/\(effectiveFrameCount))", 0.1) }
         let decoderRunner = DecoderRunner(model: decoder, policy: transformerPolicy)
@@ -118,7 +154,8 @@ final class AudioSynthesizer {
             onStep: { completed in
                 let progress = 0.1 + 0.8 * Double(completed) / Double(effectiveFrameCount)
                 onProgress("Decoder 実行中... (\(completed)/\(effectiveFrameCount))", progress)
-            }
+            },
+            debug: debug
         )
 
         // 4. HiFi-GAN
@@ -130,12 +167,35 @@ final class AudioSynthesizer {
 
         // shapeMode と policy はロード時に確定。ロード前なら fallback (.fixed(262)) を使う。
         let vocoderPolicy = loadedHifiganPolicy ?? .fixed(targetT: 262)
+        // 調査用: Decoder postnet 出力 (HiFi-GAN への入力) を書き出す。
+        // postnetOut shape: [1, T, nMels]
+        if let debug = debug {
+            let shape = postnetOut.shape.map { $0.intValue }
+            if shape.count == 3 {
+                debug.writeMlArray(
+                    name: "postnet_output",
+                    array: postnetOut,
+                    outerDim: shape[1],
+                    innerDim: shape[2]
+                )
+            } else {
+                debug.appendSummaryLine("postnet_output: unexpected shape=\(shape) — skipped npy")
+            }
+            debug.appendSummaryLine("postnet_stats: \(hifiganInputStats.summary)")
+        }
+
         let vocoderRunner = VocoderRunner(model: hifigan, policy: vocoderPolicy)
         let vocoderResult = try await vocoderRunner.run(postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels)
         var waveform = vocoderResult.waveform
         let hifiganMs = vocoderResult.predictMs
         let hifiganInputT = vocoderResult.inputT
         let hifiganOutputStats = ArrayStats.compute(from: waveform)
+
+        // 調査用: HiFi-GAN 出力波形 (デエンファシス前) を書き出す。
+        if let debug = debug {
+            debug.writeFloat1D(name: "waveform_predeemph", data: waveform)
+            debug.appendSummaryLine(String(format: "hifigan_predict_ms=%.3f inputT=%d", hifiganMs, hifiganInputT))
+        }
 
         // 本番ロギング: 実機で「どのモデル × どの設定で生成したか」と
         // 「出力波形の数値プロファイル」を 1 行で残す。grep しやすいよう接頭辞を統一。
@@ -163,6 +223,11 @@ final class AudioSynthesizer {
         await MainActor.run { onProgress("後処理中...", 0.95) }
         waveform = AudioFeatureExtractor.applyDeemphasis(waveform)
         let waveformAfterDeemphasis = ArrayStats.compute(from: waveform)
+
+        // 調査用: deemph 後の最終波形 (wav 書き出し直前の値)
+        if let debug = debug {
+            debug.writeFloat1D(name: "waveform_postdeemph", data: waveform)
+        }
 
         // デバッグ情報をまとめる
         let debugInfo = PipelineDebugInfo(
