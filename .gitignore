@@ -9,6 +9,13 @@ figures/
 audio/
 .DS_Store
 
+# Generated reference tensors (regeneratable via scripts/generate_*_reference.py)
+data/*/decoder_reference/
+data/*/hifigan_reference/
+
+# Scheduled task lock files
+.claude/scheduled_tasks.lock
+
 # Xcode
 *.xcuserstate
 xcuserdata/
