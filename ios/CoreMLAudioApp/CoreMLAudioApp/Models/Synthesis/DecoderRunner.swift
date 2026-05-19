@@ -22,12 +22,15 @@ final class DecoderRunner {
     ///   - frameCount: 生成するフレーム数 T (入力メルのフレーム数と同じ)
     ///   - nMels: メルビン数 (256)
     ///   - onStep: 各ステップ完了時に呼ばれる (引数は完了済みステップ数, 1-indexed)
+    ///   - debug: 調査用 snapshot (nil なら何もしない)。各 step の mel_out / postnet_out の
+    ///            sha256 + stats を `decoder_steps.csv` に追記する。
     /// - Returns: 最終ステップの postnet 出力、選別された各ステップの統計、`predict()` 全ステップ合計の所要時間 (ms)
     func run(
         memory: MLMultiArray,
         frameCount: Int,
         nMels: Int,
-        onStep: @MainActor (Int) -> Void
+        onStep: @MainActor (Int) -> Void,
+        debug: DebugRunSnapshot? = nil
     ) async throws -> (postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double) {
         // 初期入力: ゼロベクトル [1, 1, 256]（最初の 1 フレームぶん）
         var decoderInputData = [Float](repeating: 0, count: nMels)
@@ -87,6 +90,10 @@ final class DecoderRunner {
             let melStats = ArrayStats.compute(from: melOut)
             let postStats = lastPostnetOut.map { ArrayStats.compute(from: $0) }
                 ?? ArrayStats(min: 0, max: 0, mean: 0, hasNaN: false, hasInf: false)
+
+            // 調査用: 全 step の sha + stats を CSV に append (debug enabled 時のみ)
+            debug?.appendDecoderStep(step: step, melOut: melOut, postnetOut: lastPostnetOut)
+
             let shouldRecord = step < 5
                 || step >= effectiveFrameCount - 5
                 || (effectiveFrameCount > 10 && step >= effectiveFrameCount / 2 - 2 && step <= effectiveFrameCount / 2 + 2)
