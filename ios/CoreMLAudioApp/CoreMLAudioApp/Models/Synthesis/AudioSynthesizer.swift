@@ -67,6 +67,30 @@ final class AudioSynthesizer {
         loadedTransformerPolicy = transformerPolicy
     }
 
+    /// HiFi-GAN だけ別 computeUnits で再ロードする（Phase 2 mini 救済実験用）。
+    ///
+    /// `loadModels` の後に呼ぶと、Encoder/Decoder はそのまま残り、HiFi-GAN だけ別エンジンに載る。
+    /// 例: Decoder を cpuAndNE で動かしながら HiFi-GAN だけ cpuAndGPU に逃がす。
+    ///
+    /// 副作用: `loadedComputeUnits` は更新しない（loadModels の整合性チェックを通すため）。
+    /// 同じ synth インスタンスで後から loadModels を呼ぶときは別 computeUnits を渡すこと。
+    func reloadHifigan(precision: ModelPrecision, computeUnits: MLComputeUnits, shapeMode: ShapeModeOption) throws {
+        guard let hifiganName = shapeMode.hifiganResourceName(for: precision) else {
+            throw SynthesisError.modelNotFound(precision: "\(precision.rawValue) + \(shapeMode.displayName)")
+        }
+        guard let hifiganURL = Bundle.main.url(forResource: hifiganName, withExtension: "mlmodelc") else {
+            throw SynthesisError.modelNotFound(precision: precision.rawValue)
+        }
+        let config = MLModelConfiguration()
+        config.computeUnits = computeUnits
+        let hifi = try MLModel(contentsOf: hifiganURL, configuration: config)
+
+        hifigan = hifi
+        loadedHifiganName = hifiganName
+        loadedHifiganShapeLabel = shapeMode.resolvedShapeLabel(for: hifiganName, precision: precision)
+        loadedHifiganPolicy = shapeMode.inputPolicy
+    }
+
     /// 入力音声 URL から合成を実行し、SynthesisResult を返す
     /// - Parameter onProgress: (statusMessage, progressFraction) を各ステップで呼ぶ
     func synthesize(
