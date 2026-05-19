@@ -4,18 +4,19 @@ import AVFoundation
 import CoreML
 import Foundation
 
-/// F32 × cpuAndGPU が「XCUITest 経由だと quiet, 手動だと loud」になる問題の切り分け用テスト。
+/// F32 × cpuAndGPU の「auto-test 時に quiet になる」問題の切り分けから始まり、
+/// 2026-05-19 以降は **Phase 1 — 全 12 組合せ安定性マトリクス** の計測テストも兼ねる。
 ///
-/// 仮説: UI 自動操作 (XCUITest runner プロセス) ではなく、XCTest 環境全体が影響している可能性。
-/// このテストは UI を介さず AudioSynthesizer を直接呼ぶ。Unit テストはアプリホストプロセス
-/// 内で走るので XCTestRunner は介在しない。結果:
-///   - loud になる → 「UI 自動操作のみが原因」
-///   - quiet になる → 「XCTest 環境全般 (テストホスト初期化, ヒープ状態, signal handler 等) が原因」
+/// 計画書: [`docs/2026-05-19/all-engine-precision-stability-plan.md`](../../../../docs/2026-05-19/all-engine-precision-stability-plan.md)
 ///
-/// CMLA_DEBUG_SNAPSHOT=1 をプロセス内で setenv して、`Documents/Result/debug/` に
-/// mel / encoder / postnet / waveform を書き出す。extract_ui_test_results.sh で吸い出せる。
+/// 各 Repeat3 テストは `AudioSynthesizer` インスタンスを 1 つだけ作って iter1〜iter3 を回す。
+/// `CMLA_DEBUG_SNAPSHOT=1` をプロセス内で setenv して、`Documents/Result/debug/` に
+/// mel / encoder / postnet / waveform を書き出す。`extract_ui_test_results.sh` で吸い出せる。
 ///
-/// 2026-05-19 追加: 他組合せの Repeat3, decoder step 別 sha, dummy warm-up テストも追加した。
+/// **Phase 1 ではテストを「合否判定」に使わず、計測データの収集に使う**。rms が極端に低い・
+/// NaN/Inf が出るのも観測対象なので、assertion で fail させずに分類ラベルを log に残す。
+/// 集計は `scripts/aggregate_stability_matrix.py`。
+///
 /// Swift Testing は並列実行がデフォルトだが `setenv` で run label を切り替える都合上
 /// `.serialized` を付けて直列化する。
 @Suite(.serialized)
@@ -53,6 +54,45 @@ struct Fp32QuietInvestigationTests {
     @Test
     func repeat3F32All() async throws {
         try await runRepeat3(precision: .float32, computeUnit: .all, labelPrefix: "f32AllRepeat")
+    }
+
+    // MARK: - 2026-05-19 追加: Phase 1 全 12 組合せマトリクス
+    // 既存 5 ケース (F32×{GPU,CpuOnly,All}, F16×GPU, Int8×GPU) と合わせて 12 組合せを網羅する。
+    // ラベル命名は `<precision><computeUnit>Repeat<i>` で aggregate_stability_matrix.py が拾える形に統一。
+
+    @Test
+    func repeat3F32CpuAndNE() async throws {
+        try await runRepeat3(precision: .float32, computeUnit: .cpuAndNE, labelPrefix: "f32NeRepeat")
+    }
+
+    @Test
+    func repeat3F16CpuOnly() async throws {
+        try await runRepeat3(precision: .float16, computeUnit: .cpuOnly, labelPrefix: "f16CpuRepeat")
+    }
+
+    @Test
+    func repeat3F16CpuAndNE() async throws {
+        try await runRepeat3(precision: .float16, computeUnit: .cpuAndNE, labelPrefix: "f16NeRepeat")
+    }
+
+    @Test
+    func repeat3F16All() async throws {
+        try await runRepeat3(precision: .float16, computeUnit: .all, labelPrefix: "f16AllRepeat")
+    }
+
+    @Test
+    func repeat3Int8CpuOnly() async throws {
+        try await runRepeat3(precision: .int8, computeUnit: .cpuOnly, labelPrefix: "int8CpuRepeat")
+    }
+
+    @Test
+    func repeat3Int8CpuAndNE() async throws {
+        try await runRepeat3(precision: .int8, computeUnit: .cpuAndNE, labelPrefix: "int8NeRepeat")
+    }
+
+    @Test
+    func repeat3Int8All() async throws {
+        try await runRepeat3(precision: .int8, computeUnit: .all, labelPrefix: "int8AllRepeat")
     }
 
     // MARK: - 2026-05-19 追加: dummy warm-up → 本番 synthesize テスト
@@ -148,20 +188,18 @@ struct Fp32QuietInvestigationTests {
             onProgress: { _, _ in }
         )
         logWavStats(result: result, tag: tag)
-
-        var sumSq: Double = 0
-        for v in result.outputWaveform { sumSq += Double(v) * Double(v) }
-        let rms = result.outputWaveform.isEmpty
-            ? Float.nan
-            : Float((sumSq / Double(result.outputWaveform.count)).squareRoot())
-        // 緩い sanity: rms が極端に小さい (デエンファシス後ほぼ無音) なら異常
-        #expect(rms > 1e-4, "rms が極端に低い (\(tag)): \(rms)")
+        // Phase 1 は計測モード。quiet / clipped / nan_inf も観測対象なので assertion で
+        // fail させない。分類は logWavStats が出す `class=...` を集計スクリプトで拾う。
     }
 
     private func logWavStats(result: SynthesisResult, tag: String) {
         var sumSq: Double = 0
         var peak: Float = 0
+        var hasNaN = false
+        var hasInf = false
         for v in result.outputWaveform {
+            if v.isNaN { hasNaN = true; continue }
+            if v.isInfinite { hasInf = true; continue }
             sumSq += Double(v) * Double(v)
             if abs(v) > peak { peak = abs(v) }
         }
@@ -170,9 +208,20 @@ struct Fp32QuietInvestigationTests {
             : Float((sumSq / Double(result.outputWaveform.count)).squareRoot())
         let rmsInt16 = rms * 32767
         let peakInt16 = peak * 32767
+        let classification = classifyRun(rmsInt16: rmsInt16, peakInt16: peakInt16, hasNaN: hasNaN, hasInf: hasInf)
         print(String(
-            format: "[Fp32QuietInvestigationTests] tag=%@ count=%d float_rms=%.6f float_peak=%.6f int16_rms=%.1f int16_peak=%.1f",
-            tag, result.outputWaveform.count, rms, peak, rmsInt16, peakInt16
+            format: "[Fp32QuietInvestigationTests] tag=%@ count=%d float_rms=%.6f float_peak=%.6f int16_rms=%.1f int16_peak=%.1f has_nan=%@ has_inf=%@ class=%@",
+            tag, result.outputWaveform.count, rms, peak, rmsInt16, peakInt16,
+            hasNaN ? "true" : "false", hasInf ? "true" : "false", classification
         ))
+    }
+
+    /// Phase 1 計画書 §2.4 の分類ルール。
+    /// 先に当てはまるものを優先する: nan_inf → clipped → quiet → normal_loud
+    private func classifyRun(rmsInt16: Float, peakInt16: Float, hasNaN: Bool, hasInf: Bool) -> String {
+        if hasNaN || hasInf { return "nan_inf" }
+        if peakInt16 > 32000 && rmsInt16 > 7000 { return "clipped" }
+        if rmsInt16 < 3000 { return "quiet" }
+        return "normal_loud"
     }
 }
