@@ -35,6 +35,8 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-05-19 | [mlcomputeplan-dispatch-map](2026-05-19/mlcomputeplan-dispatch-map.md) | Phase 4 の生データ集計（18 plans、aggregate_compute_plan.py 自動生成） |
 | 2026-05-19 | [compute-plan-analysis](2026-05-19/compute-plan-analysis.md) | Phase 4 の dispatch 観測整理。F16/Int8×{cpuAndNE,all} で Decoder/HiFi-GAN 両方に NE dispatch、HiFi-GAN 出力時点で振幅差が観測される。op 単位の原因は未確定 |
 | 2026-05-19 | [coreml-hifigan-investigation-handoff](2026-05-19/coreml-hifigan-investigation-handoff.md) | /clear 後に調査を再開するための引き継ぎノート。確定事実・未確定事項・次にやることを整理 |
+| 2026-05-19 | [phase2-mini-rescue-results](2026-05-19/phase2-mini-rescue-results.md) | Phase 2 mini 救済実験。出力正規化（J）と HiFi-GAN だけ cpuAndGPU 退避（K）の効果を実機で計測。K は Decoder=ANE postnet sha が cpuAndNE 単独と bit-identical、HiFi-GAN dispatch だけで clipping が消える観測 |
+| 2026-05-19 | [phase5-implementation-policy-draft](2026-05-19/phase5-implementation-policy-draft.md) | Phase 5 実装方針のドラフト。Phase 1/2 mini/4 の観測を踏まえた設定別方針案・UI 設計案・残課題（聴感判定）の整理。確定ではない |
 
 ## トピック別
 
@@ -71,10 +73,14 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [research-direction](2026-05-10/research-direction.md)
 - [hirai-comment-memory-management](2026-05-07/hirai-comment-memory-management.md)
 - [all-engine-precision-stability-plan](2026-05-19/all-engine-precision-stability-plan.md)
+- [phase5-implementation-policy-draft](2026-05-19/phase5-implementation-policy-draft.md)
 
 ### 計測・評価結果
 
 - [quantization-pareto-baseline](2026-04-27/quantization-pareto-baseline.md)
+- [stability-matrix-analysis](2026-05-19/stability-matrix-analysis.md)
+- [compute-plan-analysis](2026-05-19/compute-plan-analysis.md)
+- [phase2-mini-rescue-results](2026-05-19/phase2-mini-rescue-results.md)
 
 ### ブランチ・PR まとめ
 
