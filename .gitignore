@@ -16,6 +16,9 @@ data/*/hifigan_reference/
 # Scheduled task lock files
 .claude/scheduled_tasks.lock
 
+# 一時ログ（テスト実行ログなど）
+_tmp_logs/
+
 # Xcode
 *.xcuserstate
 xcuserdata/
