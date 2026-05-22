@@ -43,6 +43,21 @@ def load_postnet(path: Path) -> np.ndarray | None:
     return arr.astype(np.float32)
 
 
+def crop_to_common_time(a: np.ndarray, b: np.ndarray) -> tuple[np.ndarray, np.ndarray, dict]:
+    """`[1, T, C]` 同士で T だけが違う場合に共通の min(T) フレームへそろえる。
+
+    iOS は fixed262 だと postnet が常に `[1, 262, C]`、reference は入力の実フレーム数
+    `[1, actualT, C]` になる。どちらも先頭から自己回帰生成するので、先頭 min(T) フレームが
+    対応する。C (n_mels) や rank が違う場合は実エラーなのでクロップしない。
+    """
+    if (a.ndim == b.ndim == 3 and a.shape[0] == b.shape[0]
+            and a.shape[2] == b.shape[2] and a.shape[1] != b.shape[1]):
+        t = min(a.shape[1], b.shape[1])
+        info = {"cropped": {"a_T": int(a.shape[1]), "b_T": int(b.shape[1]), "common_T": int(t)}}
+        return a[:, :t, :], b[:, :t, :], info
+    return a, b, {}
+
+
 def tensor_diff_stats(a: np.ndarray, b: np.ndarray) -> dict:
     if a.shape != b.shape:
         # broadcast 失敗するなら shape を合わせて報告のみ
@@ -52,15 +67,26 @@ def tensor_diff_stats(a: np.ndarray, b: np.ndarray) -> dict:
             "diffable": False,
         }
     diff = np.abs(a - b)
+    # NaN/Inf は nanmax/nanmean では無視されるため、別途カウントして可視化する。
+    # これをしないと「NaN 暴走した run」が max_abs_diff の小さな有限値に見えて誤読される。
+    a_nonfinite = int(np.count_nonzero(~np.isfinite(a)))
+    b_nonfinite = int(np.count_nonzero(~np.isfinite(b)))
+    diff_nonfinite = int(np.count_nonzero(~np.isfinite(diff)))
+    diff_has_finite = bool(np.any(np.isfinite(diff)))
     return {
         "shape": tuple(a.shape),
-        "max_abs_diff": float(np.nanmax(diff)),
-        "mean_abs_diff": float(np.nanmean(diff)),
-        "allclose_1e-2": bool(np.allclose(a, b, atol=1e-2)),
-        "allclose_1e-3": bool(np.allclose(a, b, atol=1e-3)),
-        "allclose_1e-4": bool(np.allclose(a, b, atol=1e-4)),
-        "ref_max_abs": float(np.max(np.abs(b))),
-        "actual_max_abs": float(np.max(np.abs(a))),
+        # 有限要素のみの最大/平均。非有限が混ざる場合は下のカウントで判断する。
+        "max_abs_diff": float(np.nanmax(diff)) if diff_has_finite else float("nan"),
+        "mean_abs_diff": float(np.nanmean(diff)) if diff_has_finite else float("nan"),
+        "nonfinite_diff_count": diff_nonfinite,
+        "actual_nonfinite_count": a_nonfinite,
+        "ref_nonfinite_count": b_nonfinite,
+        # 非有限が 1 つでもあれば allclose は False。NaN を「一致」と誤判定させない。
+        "allclose_1e-2": bool(np.allclose(a, b, atol=1e-2)) and diff_nonfinite == 0,
+        "allclose_1e-3": bool(np.allclose(a, b, atol=1e-3)) and diff_nonfinite == 0,
+        "allclose_1e-4": bool(np.allclose(a, b, atol=1e-4)) and diff_nonfinite == 0,
+        "ref_max_abs": float(np.nanmax(np.abs(b))) if np.any(np.isfinite(b)) else float("nan"),
+        "actual_max_abs": float(np.nanmax(np.abs(a))) if np.any(np.isfinite(a)) else float("nan"),
         "diffable": True,
     }
 
@@ -152,7 +178,12 @@ def compare_run(reference_dir: Path, ios_run: Path) -> dict:
     if ref_post is None or ios_post is None:
         result["postnet_diff"] = {"diffable": False, "reason": "missing file"}
     else:
-        result["postnet_diff"] = tensor_diff_stats(ios_post, ref_post)
+        # fixed262 だと iOS=[1,262,C] / reference=[1,actualT,C] で T が食い違うので、
+        # 共通の min(T) フレームにクロップしてから diff する。
+        ios_post, ref_post, crop_info = crop_to_common_time(ios_post, ref_post)
+        diff = tensor_diff_stats(ios_post, ref_post)
+        diff.update(crop_info)
+        result["postnet_diff"] = diff
 
     # 2. per-step mel 比較
     ref_steps_path = reference_dir / "decoder_step_stats.json"
@@ -173,16 +204,22 @@ def format_postnet_section(results: list[dict]) -> list[str]:
     lines = []
     lines.append("## 1. 最終 postnet_output の diff")
     lines.append("")
-    lines.append("| run | shape | max_abs_diff | mean_abs_diff | allclose 1e-2 | 1e-3 | 1e-4 | ref max | actual max |")
-    lines.append("|---|---|---:|---:|---|---|---|---:|---:|")
+    lines.append("| run | shape | max_abs_diff | mean_abs_diff | nonfinite (a/b) | allclose 1e-2 | 1e-3 | 1e-4 | ref max | actual max |")
+    lines.append("|---|---|---:|---:|---:|---|---|---|---:|---:|")
     for r in results:
         d = r.get("postnet_diff", {})
         if not d.get("diffable"):
-            lines.append(f"| {r['label']} | - | - | - | - | - | - | - | - |")
+            lines.append(f"| {r['label']} | - | - | - | - | - | - | - | - | - |")
             continue
+        shape_str = str(d.get("shape", "-"))
+        crop = d.get("cropped")
+        if crop:
+            shape_str += f" (cropped {crop['a_T']}/{crop['b_T']}→{crop['common_T']})"
+        nonfinite_str = f"{d.get('actual_nonfinite_count', 0)}/{d.get('ref_nonfinite_count', 0)}"
         lines.append(
-            f"| {r['label']} | {d.get('shape','-')} | {d.get('max_abs_diff', float('nan')):.4e} | "
+            f"| {r['label']} | {shape_str} | {d.get('max_abs_diff', float('nan')):.4e} | "
             f"{d.get('mean_abs_diff', float('nan')):.4e} | "
+            f"{nonfinite_str} | "
             f"{'✅' if d.get('allclose_1e-2') else '❌'} | "
             f"{'✅' if d.get('allclose_1e-3') else '❌'} | "
             f"{'✅' if d.get('allclose_1e-4') else '❌'} | "
