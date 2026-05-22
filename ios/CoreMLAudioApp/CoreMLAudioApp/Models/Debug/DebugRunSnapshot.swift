@@ -142,8 +142,15 @@ struct DebugRunSnapshot {
     /// Decoder ループの各 step ごとに 1 行追記する。
     /// CSV: `step,mel_sha,mel_min,mel_max,mel_mean,post_sha,post_min,post_max,post_mean`
     ///
+    /// 統計・sha は mel_out / postnet_out 全体ではなく「その step で新規生成された
+    /// フレーム (index = step)」1 本だけを対象にする。これは PyTorch reference
+    /// (generate_decoder_reference.py の `mel_pred[:, -1:, :]`) と比較対象を揃えるため。
+    /// 全フレームを対象にすると fixed262 では常に 262 フレームぶんの統計になり、
+    /// 最終フレームのみを記録する reference と必ず乖離して、
+    /// compare_decoder_reference.py が偽の divergence を step0/1 で出してしまう。
+    /// 単一フレーム sha なので quiet/loud run の CSV diff でも分岐 step がより鋭く出る。
+    ///
     /// 262 step × 数十バイトなので 1 ラン 30KB 程度。
-    /// quiet run と loud run の CSV を diff すれば、どの step から sha が分岐するか即わかる。
     func appendDecoderStep(
         step: Int,
         melOut: MLMultiArray,
@@ -155,11 +162,12 @@ struct DebugRunSnapshot {
             try? header.data(using: .utf8)?.write(to: url, options: .atomic)
         }
 
-        let melStats = ArrayStats.compute(from: melOut)
-        let melSha = sha256(of: melOut)
+        let melFrame = frameSlice(of: melOut, at: step) ?? []
+        let melStats = ArrayStats.compute(from: melFrame)
+        let melSha = sha256(of: melFrame)
         let (postSha, postStats): (String, ArrayStats) = {
-            if let p = postnetOut {
-                return (sha256(of: p), ArrayStats.compute(from: p))
+            if let p = postnetOut, let postFrame = frameSlice(of: p, at: step) {
+                return (sha256(of: postFrame), ArrayStats.compute(from: postFrame))
             }
             return ("-", ArrayStats(min: 0, max: 0, mean: 0, hasNaN: false, hasInf: false))
         }()
@@ -181,6 +189,19 @@ struct DebugRunSnapshot {
         }
     }
 
+    /// `[1, T, C]` の MLMultiArray から index 番目のフレーム `[C]` を取り出す。範囲外なら nil。
+    /// 多次元 subscript を使うので stride 非連続でも論理 C-order で読める。
+    private func frameSlice(of array: MLMultiArray, at index: Int) -> [Float]? {
+        let shape = array.shape.map { $0.intValue }
+        guard shape.count == 3, index >= 0, index < shape[1] else { return nil }
+        let channels = shape[2]
+        var frame = [Float](repeating: 0, count: channels)
+        for c in 0..<channels {
+            frame[c] = array[[0, index as NSNumber, c as NSNumber]].floatValue
+        }
+        return frame
+    }
+
     // MARK: - sha256
 
     private func sha256(of data: [Float]) -> String {
@@ -193,15 +214,5 @@ struct DebugRunSnapshot {
         }
         let digest = hasher.finalize()
         return digest.map { String(format: "%02x", $0) }.joined()
-    }
-
-    private func sha256(of array: MLMultiArray) -> String {
-        // MLMultiArray は dataPointer から生バイトで読み取れるが、stride/dtype が変動するので
-        // float に正規化してから sha を取る (どの run でも同じ計算)。
-        var buf = [Float](repeating: 0, count: array.count)
-        for i in 0..<array.count {
-            buf[i] = array[i].floatValue
-        }
-        return sha256(of: buf)
     }
 }
