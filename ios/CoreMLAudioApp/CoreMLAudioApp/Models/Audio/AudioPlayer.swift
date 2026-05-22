@@ -83,7 +83,11 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         newPlayer.delegate = self
         newPlayer.volume = 1.0
         newPlayer.prepareToPlay()
-        newPlayer.play()
+        // play() は再生開始に失敗すると throw せず false を返す。ここで弾かないと
+        // didFinishPlaying が永久に来ず、呼び出し側の継続が宙吊りになる。
+        guard newPlayer.play() else {
+            throw PlaybackError.playbackStartFailed
+        }
         player = newPlayer
     }
 
@@ -94,11 +98,13 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
     enum PlaybackError: LocalizedError {
         case formatCreationFailed
         case bufferCreationFailed
+        case playbackStartFailed
 
         var errorDescription: String? {
             switch self {
             case .formatCreationFailed: return "オーディオフォーマットの作成に失敗しました。"
             case .bufferCreationFailed: return "オーディオバッファの作成に失敗しました。"
+            case .playbackStartFailed: return "再生を開始できませんでした。"
             }
         }
     }
