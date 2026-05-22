@@ -146,7 +146,8 @@ def format_cross_diff(plans: list[dict]) -> list[str]:
     lines.append("## 4. F32 Decoder の cpuOnly vs cpuAndGPU で配置が変わる op")
     lines.append("")
 
-    decoders = [p for p in plans if "Decoder" in p.get("modelName","") and p.get("precision") == "float32"]
+    # precision は ModelPrecision.rawValue ("Float32") で書かれるので大文字小文字を無視して比較する
+    decoders = [p for p in plans if "Decoder" in p.get("modelName","") and p.get("precision", "").lower() == "float32"]
     cpu_only = next((p for p in decoders if p.get("computeUnits") == "cpuOnly"), None)
     cpu_gpu = next((p for p in decoders if p.get("computeUnits") == "cpuAndGPU"), None)
     if cpu_only is None or cpu_gpu is None:
