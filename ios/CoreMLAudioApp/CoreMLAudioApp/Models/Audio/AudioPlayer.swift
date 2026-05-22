@@ -10,9 +10,34 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         player?.isPlaying ?? false
     }
 
+    override init() {
+        super.init()
+        #if os(iOS)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        #endif
+    }
+
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         onPlaybackFinished?()
     }
+
+    #if os(iOS)
+    /// 再生中に電話などで AVAudioSession が中断されると didFinishPlaying が呼ばれず、
+    /// playOutputAndAwaitCompletion の continuation が永久に resume されずハングする。
+    /// 中断開始を「再生終了」とみなして完了コールバックを発火し、待機側を解放する。
+    @objc private func handleInterruption(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+        player?.stop()
+        onPlaybackFinished?()
+    }
+    #endif
 
     /// Float 波形配列から WAV を生成して再生する
     ///
@@ -91,8 +116,11 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         player = newPlayer
     }
 
+    /// 再生を止める。stop() では AVAudioPlayer の delegate (didFinishPlaying) が呼ばれないので、
+    /// 待機側 (continuation) を解放するため明示的に完了コールバックを呼ぶ。
     func stop() {
         player?.stop()
+        onPlaybackFinished?()
     }
 
     enum PlaybackError: LocalizedError {
