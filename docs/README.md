@@ -28,6 +28,15 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-05-07 | [hirai-comment-memory-management](2026-05-07/hirai-comment-memory-management.md) | RangeDim+GPU の E5RT 問題に関する平井先生 Slack コメントの解釈メモ（動的メモリ確保の観点、先生の 3 つの意図整理、section 3/4 との接続） |
 | 2026-05-08 | [device-benchmark-workflow](2026-05-08/device-benchmark-workflow.md) | iPhone 実機で 12 通り計測を 1 コマンドで完走させるワークフロー（`run_device_benchmark.sh`、`xcrun devicectl` 経由のファイル吸い出し） |
 | 2026-05-10 | [research-direction](2026-05-10/research-direction.md) | `/grill-me` セッションを通じた卒研方針の整理。研究目標・公知化する 5 貢献・章立て・採用したアプリスコープ・採用しなかった案の理由・次に決めること |
+| 2026-05-17 | [fp32-cpuandgpu-quiet-vs-loud-investigation](2026-05-17/fp32-cpuandgpu-quiet-vs-loud-investigation.md) | XCUITest 経由だと F32 × cpuAndGPU が quiet（rms 400-728）、手動操作だと loud（rms 5029、決定論的）の調査メモ。playback-wait race 修正、順序効果（cpuAndGPU を先頭にすると後続 cpuOnly/cpuAndNE/all が loud に化ける）、未確定の論点を中間まとめ |
+| 2026-05-19 | [all-engine-precision-stability-plan](2026-05-19/all-engine-precision-stability-plan.md) | 全 12 組合せ（precision × computeUnits）で爆発音を安定して鳴らす条件を体系的に探索する Phase 0〜5 の研究計画。マトリクス計測 → 救済実験 → MLComputePlan → Decoder 内部分解 → 実装方針 |
+| 2026-05-19 | [stability-matrix-results](2026-05-19/stability-matrix-results.md) | Phase 1 の生データ集計（aggregate_stability_matrix.py 自動生成） |
+| 2026-05-19 | [stability-matrix-analysis](2026-05-19/stability-matrix-analysis.md) | Phase 1 実機の観測整理。F16/Int8×{cpuAndNE,all} で clipping を観測、F32×cpuAndGPU 単発初回の非決定性を再現、warm-up の効果を確認 |
+| 2026-05-19 | [mlcomputeplan-dispatch-map](2026-05-19/mlcomputeplan-dispatch-map.md) | Phase 4 の生データ集計（18 plans、aggregate_compute_plan.py 自動生成） |
+| 2026-05-19 | [compute-plan-analysis](2026-05-19/compute-plan-analysis.md) | Phase 4 の dispatch 観測整理。F16/Int8×{cpuAndNE,all} で Decoder/HiFi-GAN 両方に NE dispatch、HiFi-GAN 出力時点で振幅差が観測される。op 単位の原因は未確定 |
+| 2026-05-19 | [coreml-hifigan-investigation-handoff](2026-05-19/coreml-hifigan-investigation-handoff.md) | /clear 後に調査を再開するための引き継ぎノート。確定事実・未確定事項・次にやることを整理 |
+| 2026-05-19 | [phase2-mini-rescue-results](2026-05-19/phase2-mini-rescue-results.md) | Phase 2 mini 救済実験。出力正規化（J）と HiFi-GAN だけ cpuAndGPU 退避（K）の効果を実機で計測。K は Decoder=ANE postnet sha が cpuAndNE 単独と bit-identical、HiFi-GAN dispatch だけで clipping が消える観測 |
+| 2026-05-19 | [phase5-implementation-policy-draft](2026-05-19/phase5-implementation-policy-draft.md) | Phase 5 実装方針のドラフト。Phase 1/2 mini/4 の観測を踏まえた設定別方針案・UI 設計案・残課題（聴感判定）の整理。確定ではない |
 
 ## トピック別
 
@@ -38,6 +47,8 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [coreml-pipeline](2026-03-21/coreml-pipeline.md)
 - [float32-gpu-debug-report](2026-04-05/float32-gpu-debug-report.md)
 - [float32-gpu-accumulation-experiment](2026-04-27/float32-gpu-accumulation-experiment.md)
+- [fp32-cpuandgpu-quiet-vs-loud-investigation](2026-05-17/fp32-cpuandgpu-quiet-vs-loud-investigation.md)
+- [all-engine-precision-stability-plan](2026-05-19/all-engine-precision-stability-plan.md)
 
 ### iOS 実装
 
@@ -61,10 +72,15 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [advisor-meeting-todo](2026-04-22/advisor-meeting-todo.md)
 - [research-direction](2026-05-10/research-direction.md)
 - [hirai-comment-memory-management](2026-05-07/hirai-comment-memory-management.md)
+- [all-engine-precision-stability-plan](2026-05-19/all-engine-precision-stability-plan.md)
+- [phase5-implementation-policy-draft](2026-05-19/phase5-implementation-policy-draft.md)
 
 ### 計測・評価結果
 
 - [quantization-pareto-baseline](2026-04-27/quantization-pareto-baseline.md)
+- [stability-matrix-analysis](2026-05-19/stability-matrix-analysis.md)
+- [compute-plan-analysis](2026-05-19/compute-plan-analysis.md)
+- [phase2-mini-rescue-results](2026-05-19/phase2-mini-rescue-results.md)
 
 ### ブランチ・PR まとめ
 

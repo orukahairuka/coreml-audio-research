@@ -22,6 +22,8 @@ final class CoreMLAudioAppUITests: XCTestCase {
     @MainActor
     func testCaptureAllCombinations() throws {
         let app = XCUIApplication()
+        app.launchEnvironment["CMLA_DEBUG_SNAPSHOT"] = "1"
+        app.launchEnvironment["CMLA_DEBUG_RUN_LABEL"] = "allCombinations"
         app.launch()
 
         // 精度 × デバイスの組み合わせ。rawValue が accessibilityIdentifier 末尾と一致する。
@@ -30,6 +32,100 @@ final class CoreMLAudioAppUITests: XCTestCase {
 
         var failures: [(combo: String, reason: String)] = []
 
+        for precision in precisions {
+            for computeUnit in computeUnits {
+                let combo = "\(precision) × \(computeUnit)"
+                XCTContext.runActivity(named: "Combination: \(combo)") { _ in
+                    do {
+                        try runOneCombination(app: app, precision: precision, computeUnit: computeUnit)
+                    } catch {
+                        failures.append((combo, "\(error)"))
+                    }
+                }
+            }
+        }
+
+        if !failures.isEmpty {
+            let summary = failures.map { "- \($0.combo): \($0.reason)" }.joined(separator: "\n")
+            XCTFail("失敗した組み合わせ: \(failures.count) 件\n\(summary)")
+        }
+    }
+
+    /// Fresh app から F32 × cpuAndGPU を 1 発目に走らせる検証用テスト。
+    /// 手動操作と同じ出力 (mode B, rms ~5029) になるかを確認する。
+    /// (実験 A: sleep なし baseline)
+    @MainActor
+    func testFp32GpuFreshFirst() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["CMLA_DEBUG_SNAPSHOT"] = "1"
+        app.launchEnvironment["CMLA_DEBUG_RUN_LABEL"] = "freshFirstNoSleep"
+        app.launch()
+        try runOneCombination(app: app, precision: "Float32", computeUnit: "cpuAndGPU")
+    }
+
+    /// 実験 B: launch 直後に 10 秒 sleep を入れた F32 × cpuAndGPU 単発。
+    /// sleep なし版と比較して loud に化けるかを見る (launch 直後タイミング問題仮説の検証)。
+    @MainActor
+    func testFp32GpuFreshFirstWithLaunchSleep10() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["CMLA_DEBUG_SNAPSHOT"] = "1"
+        app.launchEnvironment["CMLA_DEBUG_RUN_LABEL"] = "freshFirstSleep10"
+        app.launch()
+        // 起動直後の AVAudioSession / Metal ウォームアップ / CoreML 遅延初期化が
+        // 影響しているかを切り分けるため、10 秒だけ静置してから初操作する。
+        Thread.sleep(forTimeInterval: 10)
+        try runOneCombination(app: app, precision: "Float32", computeUnit: "cpuAndGPU")
+    }
+
+    /// 実験 C: F32 × cpuAndGPU 単発の再現性確認。
+    /// アプリを 3 回新規起動して 1 発ずつ実行。md5 / rms / peak の分布を取る。
+    @MainActor
+    func testFp32GpuFreshFirstRepeat3() throws {
+        for i in 1...3 {
+            let app = XCUIApplication()
+            app.launchEnvironment["CMLA_DEBUG_SNAPSHOT"] = "1"
+            app.launchEnvironment["CMLA_DEBUG_RUN_LABEL"] = "freshFirstRepeat\(i)"
+            app.launch()
+            try runOneCombination(app: app, precision: "Float32", computeUnit: "cpuAndGPU")
+            app.terminate()
+            // 再 launch までに少し間を取る (terminate 完了待ち)
+            Thread.sleep(forTimeInterval: 2)
+        }
+    }
+
+    /// 実験 D-1: F32 × cpuOnly 単発の再現性確認。
+    @MainActor
+    func testFp32CpuOnlyFreshFirst() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["CMLA_DEBUG_SNAPSHOT"] = "1"
+        app.launchEnvironment["CMLA_DEBUG_RUN_LABEL"] = "freshFirstCpuOnly"
+        app.launch()
+        try runOneCombination(app: app, precision: "Float32", computeUnit: "cpuOnly")
+    }
+
+    /// 実験 D-2: F32 × all 単発の再現性確認。
+    @MainActor
+    func testFp32AllFreshFirst() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["CMLA_DEBUG_SNAPSHOT"] = "1"
+        app.launchEnvironment["CMLA_DEBUG_RUN_LABEL"] = "freshFirstAll"
+        app.launch()
+        try runOneCombination(app: app, precision: "Float32", computeUnit: "all")
+    }
+
+    /// 12 通りを cpuAndGPU から始める順序版。
+    /// fp32 × cpuAndGPU を 1 番目に走らせれば mode B (loud) になるかの検証。
+    @MainActor
+    func testCaptureAllCombinationsGpuFirst() throws {
+        let app = XCUIApplication()
+        app.launchEnvironment["CMLA_DEBUG_SNAPSHOT"] = "1"
+        app.launchEnvironment["CMLA_DEBUG_RUN_LABEL"] = "allCombinationsGpuFirst"
+        app.launch()
+
+        let precisions = ["Float32", "Float16", "Int8"]
+        let computeUnits = ["cpuAndGPU", "cpuOnly", "cpuAndNE", "all"] // GPU を先頭に
+
+        var failures: [(combo: String, reason: String)] = []
         for precision in precisions {
             for computeUnit in computeUnits {
                 let combo = "\(precision) × \(computeUnit)"

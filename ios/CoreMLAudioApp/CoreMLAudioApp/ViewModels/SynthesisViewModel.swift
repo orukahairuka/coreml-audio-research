@@ -40,6 +40,7 @@ final class SynthesisViewModel {
     private let audioRecorder = AudioRecorder()
     private let stabilityTester = VocoderStabilityTester()
     private(set) var synthesisResult: SynthesisResult?
+    private var playbackContinuation: CheckedContinuation<Void, Never>?
 
     // 安定性テストのサマリ（テスト直後に表示する）
     private(set) var stabilityCsvURL: URL?
@@ -53,7 +54,14 @@ final class SynthesisViewModel {
 
     init() {
         audioPlayer.onPlaybackFinished = { [weak self] in
-            Task { @MainActor in self?.isPlaying = false }
+            Task { @MainActor in
+                guard let self = self else { return }
+                self.isPlaying = false
+                if let cont = self.playbackContinuation {
+                    self.playbackContinuation = nil
+                    cont.resume()
+                }
+            }
         }
         audioRecorder.onRecordingFinished = { [weak self] url in
             Task { @MainActor in
@@ -166,7 +174,7 @@ final class SynthesisViewModel {
             saveTimingArtifact(result: result)
             status = "合成完了"
             progress = 1.0
-            playOutput()
+            await playOutputAndAwaitCompletion()
         } catch {
             errorMessage = error.localizedDescription
             status = "エラー"
@@ -272,6 +280,25 @@ final class SynthesisViewModel {
             isPlaying = true
         } catch {
             errorMessage = "再生エラー: \(error.localizedDescription)"
+        }
+    }
+
+    private func playOutputAndAwaitCompletion() async {
+        guard let result = synthesisResult else { return }
+        let baseName = "\(result.precision.rawValue)_\(result.computeUnit.rawValue)"
+        do {
+            try audioPlayer.play(
+                waveform: result.outputWaveform,
+                sampleRate: AudioFeatureExtractor.sampleRate,
+                baseName: baseName
+            )
+            isPlaying = true
+        } catch {
+            errorMessage = "再生エラー: \(error.localizedDescription)"
+            return
+        }
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            playbackContinuation = cont
         }
     }
 
