@@ -9,29 +9,32 @@ import Foundation
 /// `.mlmodelc` はビルド時にコンパイル済みだが、`MLModel(contentsOf:configuration:)` は
 /// 各 computeUnits 向けに**初回だけ特殊化（specialize / プラン作成）**を走らせる。これが
 /// 初回ロードの主成分。2 回目以降は OS のコンパイル済みキャッシュに当たるので速い。
-/// ユーザー体感では「各セルを初めて触った瞬間だけ遅く、戻ってきたら速い」。
 /// したがって 1 セルにつき **初回ロード** と **キャッシュ後ロード** の 2 点を採る。
 ///
-/// ## 計測の前提（真の初回を採るには）
+/// ## クラッシュ／ハング耐性（実機で観測した事象への対応）
 ///
-/// OS のコンパイルキャッシュはプロセスをまたいで残る。よって、あるセルを一度でも
-/// ロード済み（例: 先に「合成実行」した）だと、その後のスイープでは「初回」も実は
-/// キャッシュ後の値になる。**真の初回が欲しければ、アプリを起動した直後・合成を一度も
-/// 走らせる前にこのスイープを実行すること。**
+/// 実機で `Float16 × cpuAndNE` のロードが返らず、最終的に **OS にプロセスごと kill** された。
+/// ANE 経路のロードはハングを超えてアプリを落とすことがある。そこで:
 ///
-/// ## 例外捕捉
-///
-/// `MLModel(contentsOf:)` が Swift の `throws` で投げるエラーは捕捉できるが、E5RT 系の
-/// プロセス即死は捕捉できない。`VocoderStabilityTester` と同様、結果は 1 セルごとに即時
-/// CSV 追記し、途中で落ちても「どこまで測れたか」が残るようにする。
+/// 1. **再開可能**: CSV は固定名 (`load_timing.csv`)。再起動すると既に記録済みのセルを
+///    スキップし、クラッシュ直前に書いた crumb (`load_timing_current.txt`) のセルを
+///    `crashed_on_load` として記録してから続きを測る。→ 落ちたら**再起動するだけ**で進む。
+/// 2. **ウォッチドッグ**: 1 セルのロードが `timeoutSec` を超えたら `load_timeout` として
+///    打ち切り、次セルへ（プロセスを巻き込まないハング向け）。
+/// 3. **順序**: 安全な `cpuOnly → cpuAndGPU` を先に、ANE を使う `cpuAndNE → all` を後に
+///    回し、落ちる前に確実なデータを確定させる。
 final class ModelLoadTimingTester {
 
     // MARK: - 設定
 
     /// 本番グリッド。shape は本番の fixed262 に固定する。
     static let precisions: [ModelPrecision] = ModelPrecision.allCases
-    static let computeUnitOptions: [ComputeUnitOption] = ComputeUnitOption.allCases
+    /// 安全側 → ANE 側の順に並べる（落ちる前に安全セルを確定させるため）。
+    static let computeUnitOptions: [ComputeUnitOption] = [.cpuOnly, .cpuAndGPU, .cpuAndNE, .all]
     static let shapeMode: ShapeModeOption = .fixed262
+
+    /// 1 セルのロードがこれを超えたら `load_timeout` として打ち切る。
+    static let timeoutSec: Double = 90
 
     // MARK: - 結果
 
@@ -47,7 +50,8 @@ final class ModelLoadTimingTester {
         let precision: String
         let computeUnits: String
         let shapeMode: String
-        let status: String        // "success" | "model_missing" | "load_failed"
+        /// "success" | "model_missing" | "load_failed" | "load_timeout" | "crashed_on_load"
+        let status: String
         let encoder: ModelLoad?
         let decoder: ModelLoad?
         let hifigan: ModelLoad?
@@ -69,6 +73,7 @@ final class ModelLoadTimingTester {
     // MARK: - 実行
 
     /// 12 セルを順にロード計測し、結果配列と CSV パスを返す。
+    /// 既に CSV に記録済みのセルはスキップし、クラッシュ痕跡のセルは `crashed_on_load` で記録する。
     func runAll(onProgress: @MainActor @escaping (String) -> Void) async -> (results: [Result], csvURL: URL?) {
         let dir: URL
         do {
@@ -78,16 +83,33 @@ final class ModelLoadTimingTester {
             return ([], nil)
         }
 
-        let timestamp = Self.timestamp()
-        let csvURL = dir.appendingPathComponent("load_timing_\(timestamp).csv")
-        let crumbURL = dir.appendingPathComponent("load_timing_\(timestamp)_current.txt")
+        let csvURL = dir.appendingPathComponent("load_timing.csv")
+        let crumbURL = dir.appendingPathComponent("load_timing_current.txt")
 
-        let header = "precision,compute_units,shape_mode,status,"
-            + "encoder_first_ms,decoder_first_ms,hifigan_first_ms,total_first_ms,"
-            + "encoder_cached_ms,decoder_cached_ms,hifigan_cached_ms,total_cached_ms,error\n"
-        try? header.write(to: csvURL, atomically: true, encoding: .utf8)
-        print("[LoadTimingTester] CSV path: \(csvURL.path)")
-        print("[CSV] \(header)", terminator: "")
+        // 初回のみヘッダを書く（再開時は追記）。
+        if !FileManager.default.fileExists(atPath: csvURL.path) {
+            let header = "precision,compute_units,shape_mode,status,"
+                + "encoder_first_ms,decoder_first_ms,hifigan_first_ms,total_first_ms,"
+                + "encoder_cached_ms,decoder_cached_ms,hifigan_cached_ms,total_cached_ms,error\n"
+            try? header.write(to: csvURL, atomically: true, encoding: .utf8)
+            print("[LoadTimingTester] CSV path: \(csvURL.path)")
+        }
+
+        // 既に記録済みのセル集合を CSV から復元する。
+        var done = Self.recordedCells(in: csvURL)
+
+        // クラッシュ痕跡: 前回ここで落ちた、というセルを crashed_on_load で記録する。
+        if let crashed = Self.readCrumbCell(at: crumbURL), !done.contains(Self.key(crashed.precision, crashed.computeUnits)) {
+            let r = Result(
+                precision: crashed.precision, computeUnits: crashed.computeUnits,
+                shapeMode: Self.shapeMode.rawValue, status: "crashed_on_load",
+                encoder: nil, decoder: nil, hifigan: nil,
+                error: "前回このセルのロード中にプロセスが終了（ハング/クラッシュ）"
+            )
+            Self.append(result: r, to: csvURL)
+            done.insert(Self.key(crashed.precision, crashed.computeUnits))
+            print("[LoadTimingTester] crash recovered: \(crashed.precision)/\(crashed.computeUnits) → crashed_on_load")
+        }
 
         var results: [Result] = []
         let totalCases = Self.precisions.count * Self.computeUnitOptions.count
@@ -96,26 +118,64 @@ final class ModelLoadTimingTester {
         for precision in Self.precisions {
             for cu in Self.computeUnitOptions {
                 caseIndex += 1
+                if done.contains(Self.key(precision.rawValue, cu.rawValue)) {
+                    print("[LoadTimingTester] (\(caseIndex)/\(totalCases)) \(precision.rawValue)/\(cu.rawValue): skip (記録済み)")
+                    continue
+                }
+
                 let label = "\(precision.rawValue) / \(cu.rawValue) / \(Self.shapeMode.rawValue)"
                 await MainActor.run { onProgress("(\(caseIndex)/\(totalCases)) \(label)") }
                 print("[LoadTimingTester] (\(caseIndex)/\(totalCases)) \(label): start")
-                try? "\(label)\n".write(to: crumbURL, atomically: true, encoding: .utf8)
 
-                let r = Self.measureCell(precision: precision, computeUnit: cu)
+                // クラッシュ時の手がかりとして「いま測っているセル」を残す。
+                try? "\(precision.rawValue) / \(cu.rawValue) / \(Self.shapeMode.rawValue)\n"
+                    .write(to: crumbURL, atomically: true, encoding: .utf8)
+
+                let r = await measureCellWithWatchdog(precision: precision, computeUnit: cu)
                 results.append(r)
                 Self.append(result: r, to: csvURL)
+                done.insert(Self.key(precision.rawValue, cu.rawValue))
+
                 let firstPart = r.totalFirstMs.map { String(format: ", first=%.1fms", $0) } ?? ""
                 let cachedPart = r.totalCachedMs.map { String(format: ", cached=%.1fms", $0) } ?? ""
                 let errorPart = r.error.map { ", error=\($0)" } ?? ""
                 print("[LoadTimingTester]   → status=\(r.status)" + firstPart + cachedPart + errorPart)
+
+                // セルが正常に記録できたので crumb は消す（途中終了でないことの証拠）。
+                try? FileManager.default.removeItem(at: crumbURL)
             }
         }
 
-        try? FileManager.default.removeItem(at: crumbURL)
-        let doneCount = results.count
-        let csvName = csvURL.lastPathComponent
-        await MainActor.run { onProgress("ロード計測完了 (\(doneCount) 件) → \(csvName)") }
+        let allDone = done.count >= totalCases
+        let msg = allDone ? "ロード計測完了 (\(done.count)/\(totalCases))"
+                          : "途中まで記録 (\(done.count)/\(totalCases))。再起動で続きから"
+        await MainActor.run { onProgress(msg) }
         return (results, csvURL)
+    }
+
+    /// 1 セルをウォッチドッグ付きで計測する。`timeoutSec` 超過で `load_timeout` を返す。
+    private func measureCellWithWatchdog(precision: ModelPrecision, computeUnit: ComputeUnitOption) async -> Result {
+        let timeoutNs = UInt64(Self.timeoutSec * 1_000_000_000)
+        return await withTaskGroup(of: Result?.self) { group in
+            group.addTask {
+                // 同期的なブロッキングロードを専用スレッドで走らせる。
+                Self.measureCell(precision: precision, computeUnit: computeUnit)
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: timeoutNs)
+                return nil   // タイムアウト
+            }
+            let first = (await group.next()) ?? nil
+            group.cancelAll()
+            if let r = first { return r }
+            // タイムアウト（ロードが返ってこない。abandon して次へ）。
+            return Result(
+                precision: precision.rawValue, computeUnits: computeUnit.rawValue,
+                shapeMode: Self.shapeMode.rawValue, status: "load_timeout",
+                encoder: nil, decoder: nil, hifigan: nil,
+                error: "ロードが \(Int(Self.timeoutSec))s 以内に返らなかった"
+            )
+        }
     }
 
     /// 1 セル分: Encoder / Decoder / HiFi-GAN を「初回 → キャッシュ後」の順に 2 回ロードして計時する。
@@ -143,8 +203,6 @@ final class ModelLoadTimingTester {
 
         let units = computeUnit.mlComputeUnits
         do {
-            // 初回ロード（特殊化を含む） → 直後にもう一度ロード（OS キャッシュに当たる）。
-            // 各モデルを 2 回連続でロードして first / cached を採る。
             let encoder = try measureModel(url: encoderURL, name: encoderName, units: units)
             let decoder = try measureModel(url: decoderURL, name: decoderName, units: units)
             let hifigan = try measureModel(url: hifiganURL, name: hifiganName, units: units)
@@ -184,6 +242,31 @@ final class ModelLoadTimingTester {
         return ModelLoad(resourceName: name, firstMs: firstMs, cachedMs: cachedMs)
     }
 
+    // MARK: - 再開サポート
+
+    static func key(_ precision: String, _ computeUnits: String) -> String { "\(precision)|\(computeUnits)" }
+
+    /// CSV を読み、既に記録済みの (precision, computeUnits) キー集合を返す。
+    private static func recordedCells(in csvURL: URL) -> Set<String> {
+        guard let text = try? String(contentsOf: csvURL, encoding: .utf8) else { return [] }
+        var set: Set<String> = []
+        for line in text.split(separator: "\n").dropFirst() {   // ヘッダを除く
+            let cols = line.split(separator: ",", omittingEmptySubsequences: false)
+            if cols.count >= 2 {
+                set.insert(key(String(cols[0]), String(cols[1])))
+            }
+        }
+        return set
+    }
+
+    /// crumb ファイル（"Float16 / cpuAndNE / fixed262"）から precision と computeUnits を取り出す。
+    private static func readCrumbCell(at crumbURL: URL) -> (precision: String, computeUnits: String)? {
+        guard let text = try? String(contentsOf: crumbURL, encoding: .utf8) else { return nil }
+        let parts = text.split(separator: "/").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard parts.count >= 2 else { return nil }
+        return (parts[0], parts[1])
+    }
+
     // MARK: - 出力
 
     static func resultDirectory() throws -> URL {
@@ -194,12 +277,6 @@ final class ModelLoadTimingTester {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         }
         return dir
-    }
-
-    static func timestamp() -> String {
-        let f = DateFormatter()
-        f.dateFormat = "yyyyMMdd_HHmmss"
-        return f.string(from: Date())
     }
 
     /// 1 セル分を CSV に追記する（fsync 付き + stdout ミラー）。
