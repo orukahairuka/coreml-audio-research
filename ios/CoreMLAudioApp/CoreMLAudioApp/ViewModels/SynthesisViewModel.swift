@@ -39,6 +39,7 @@ final class SynthesisViewModel {
     private let audioPlayer = AudioPlayer()
     private let audioRecorder = AudioRecorder()
     private let stabilityTester = VocoderStabilityTester()
+    private let loadTimingTester = ModelLoadTimingTester()
     private(set) var synthesisResult: SynthesisResult?
     private var playbackContinuation: CheckedContinuation<Void, Never>?
 
@@ -49,6 +50,10 @@ final class SynthesisViewModel {
     // 差分テストのサマリ
     private(set) var diffCsvURL: URL?
     private(set) var diffSummary: String?
+
+    // ロード時間計測のサマリ
+    private(set) var loadTimingCsvURL: URL?
+    private(set) var loadTimingSummary: String?
 
     // MARK: - Init
 
@@ -265,6 +270,35 @@ final class SynthesisViewModel {
         let failed = total - success
         stabilitySummary = "実行: \(total) / 成功: \(success) / 失敗: \(failed) / 飽和: \(saturated) / NaN: \(nans)"
         status = "安定性テスト完了"
+        progress = 1.0
+    }
+
+    /// 本番 12 セル（精度3 × デバイス4, shape=fixed262）の 3 モデルロード時間を
+    /// 「初回 / キャッシュ後」で計測して CSV に書き出す。
+    ///
+    /// 真の初回（コンパイル/特殊化込み）を採るには、アプリ起動直後・合成を一度も
+    /// 実行する前にこのテストを走らせること（OS のコンパイルキャッシュはプロセスを
+    /// またいで残るため）。
+    func runLoadTimingTest() async {
+        errorMessage = nil
+        loadTimingCsvURL = nil
+        loadTimingSummary = nil
+        isProcessing = true
+        progress = 0
+        status = "ロード時間計測開始..."
+        defer { isProcessing = false }
+
+        let (results, csvURL) = await loadTimingTester.runAll(onProgress: { [weak self] message in
+            self?.status = message
+        })
+
+        loadTimingCsvURL = csvURL
+        let total = results.count
+        let success = results.filter { $0.status == "success" }.count
+        let missing = results.filter { $0.status == "model_missing" }.count
+        let failed = total - success - missing
+        loadTimingSummary = "計測: \(total) / 成功: \(success) / 未生成: \(missing) / 失敗: \(failed)"
+        status = "ロード時間計測完了"
         progress = 1.0
     }
 
