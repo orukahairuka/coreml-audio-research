@@ -154,27 +154,41 @@ final class ModelLoadTimingTester {
     }
 
     /// 1 セルをウォッチドッグ付きで計測する。`timeoutSec` 超過で `load_timeout` を返す。
+    ///
+    /// `withTaskGroup` を使わない理由: タスクグループはクロージャ末尾で**残りの子タスク
+    /// 全部の完了を暗黙に待つ**（バリア）。`MLModel(contentsOf:)` は同期ブロッキングで
+    /// `Task.isCancelled` を見ないため `cancelAll()` でも止まらず、ロードが本当にハングすると
+    /// この関数自体が返れなくなる（＝ウォッチドッグが本来守りたいハング時に効かない）。
+    /// そこでロード本体を専用スレッドに逃がし、タイムアウトと「先に終わった方で **1 度だけ**
+    /// resume する」unstructured な race にする。ハングしてもタイムアウト側で確実に返り、
+    /// 取り残したロードスレッドは abandon する（次セルへ進む）。
+    ///
+    /// 既知の限界: abandon したスレッドが ANE 資源を掴んだまま生き残り、後から
+    /// プロセスを kill すると、次セルが `crashed_on_load` と誤記録され得る（稀）。
+    /// その場合 `load_timeout` を出した**次の**セルの `crashed_on_load` は疑ってよい。
     private func measureCellWithWatchdog(precision: ModelPrecision, computeUnit: ComputeUnitOption) async -> Result {
-        let timeoutNs = UInt64(Self.timeoutSec * 1_000_000_000)
-        return await withTaskGroup(of: Result?.self) { group in
-            group.addTask {
-                // 同期的なブロッキングロードを専用スレッドで走らせる。
-                Self.measureCell(precision: precision, computeUnit: computeUnit)
+        let timeoutSec = Self.timeoutSec
+        let shapeMode = Self.shapeMode.rawValue
+        let precisionName = precision.rawValue
+        let computeUnitName = computeUnit.rawValue
+        let gate = SingleResume<Result>()
+
+        return await withCheckedContinuation { continuation in
+            // ロード本体（同期ブロッキング）を専用スレッドで走らせる。
+            Thread.detachNewThread {
+                let r = Self.measureCell(precision: precision, computeUnit: computeUnit)
+                gate.resume(continuation, with: r)
             }
-            group.addTask {
-                try? await Task.sleep(nanoseconds: timeoutNs)
-                return nil   // タイムアウト
+            // ウォッチドッグ。ロードが返らなくてもここで必ず resume される。
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSec) {
+                let timeout = Result(
+                    precision: precisionName, computeUnits: computeUnitName,
+                    shapeMode: shapeMode, status: "load_timeout",
+                    encoder: nil, decoder: nil, hifigan: nil,
+                    error: "ロードが \(Int(timeoutSec))s 以内に返らなかった"
+                )
+                gate.resume(continuation, with: timeout)
             }
-            let first = (await group.next()) ?? nil
-            group.cancelAll()
-            if let r = first { return r }
-            // タイムアウト（ロードが返ってこない。abandon して次へ）。
-            return Result(
-                precision: precision.rawValue, computeUnits: computeUnit.rawValue,
-                shapeMode: Self.shapeMode.rawValue, status: "load_timeout",
-                encoder: nil, decoder: nil, hifigan: nil,
-                error: "ロードが \(Int(Self.timeoutSec))s 以内に返らなかった"
-            )
         }
     }
 
@@ -319,5 +333,23 @@ final class ModelLoadTimingTester {
             d(r.totalCachedMs),
             esc(r.error),
         ].joined(separator: ",") + "\n"
+    }
+}
+
+/// continuation を「最初の 1 回だけ」resume するスレッドセーフなガード。
+/// ロード本体スレッドとウォッチドッグが競争するため、二重 resume（クラッシュ要因）を防ぐ。
+private final class SingleResume<Value> {
+    private let lock = NSLock()
+    private var resumed = false
+
+    func resume(_ continuation: CheckedContinuation<Value, Never>, with value: Value) {
+        lock.lock()
+        if resumed {
+            lock.unlock()
+            return
+        }
+        resumed = true
+        lock.unlock()
+        continuation.resume(returning: value)
     }
 }
