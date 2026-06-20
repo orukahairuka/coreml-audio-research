@@ -102,11 +102,11 @@ Phase 1 の debug snapshot から `postnet_output`（HiFi-GAN 入力）と `wave
 | F32 × cpuOnly | 採用候補 | manual baseline と一致 |
 | F32 × cpuAndGPU | 条件付き採用候補 | warm-up 1 回入れた上で許可 |
 | Int8 × cpuOnly | 採用候補 | manual baseline と近い |
-| F16 / Int8 × cpuAndNE | UI から外す候補 | clipping を観測 |
-| F16 / Int8 × all | UI から外す候補 | clipping を観測（F16/Int8 では all で NE 経路に乗る） |
-| ANE 経路全般 | 研究用 / 実験用として残すのはあり | UI 経由の本番採用は避ける |
+| F16 / Int8 × cpuAndNE | 本番方針は未定 | clipping を観測。当面は UI に残す |
+| F16 / Int8 × all | 本番方針は未定 | clipping を観測（F16/Int8 では all で NE 経路に乗る）。当面は UI に残す |
+| ANE 経路全般 | 研究用 / 実験用として残す | 本番でどう扱うかは未定。方針が決まるまで UI から外さない |
 
-これは Phase 5（実装方針の確定）で改めてレビューする。
+これは Phase 5（実装方針の確定）で改めてレビューする。**方針が決まるまでは、どのセルも UI から外さず 12 セル全てを選択可能なまま残す。**
 
 ## 6. 次にやること
 
@@ -124,7 +124,7 @@ Phase 1 の debug snapshot から `postnet_output`（HiFi-GAN 入力）と `wave
 
 ### Phase 5 — 実装方針の確定
 
-- §5 の表をベースに UI から外す設定を確定
+- §5 の表をベースに各設定の本番での扱いを検討（方針が決まるまで UI からは外さない）
 - warm-up 戦略の本番組み込み（F32 × cpuAndGPU 用）
 - 異常検出（NaN/Inf/rms/peak）+ retry の本番組み込み有無
 

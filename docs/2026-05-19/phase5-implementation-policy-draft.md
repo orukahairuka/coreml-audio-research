@@ -48,14 +48,14 @@
 | F32 × all | normal_loud（実態は CPU/GPU） | 不要 | 採用候補。同上 |
 | F16 × cpuOnly | normal_loud | 不要 | 採用候補 |
 | F16 × cpuAndGPU | normal_loud | 不要 | **標準採用候補**（既存本番、PyTorch reference に近い） |
-| F16 × cpuAndNE | clipped | (J) 出力正規化で振幅は救える / (K) HiFi-GAN を GPU に逃がせば normal_loud | UI からは外す方向。研究設定として K と組み合わせるなら採用可 |
-| F16 × all | clipped | 同上 | UI からは外す方向 |
+| F16 × cpuAndNE | clipped | (J) 出力正規化で振幅は救える / (K) HiFi-GAN を GPU に逃がせば normal_loud | 本番方針は未定。当面は UI に残す。研究設定として K と組み合わせるなら採用可 |
+| F16 × all | clipped | 同上 | 本番方針は未定。当面は UI に残す |
 | Int8 × cpuOnly | normal_loud | 不要 | 採用候補 |
 | Int8 × cpuAndGPU | normal_loud | 不要 | 採用候補 |
-| Int8 × cpuAndNE | clipped | (J) (K) F16 と同じ傾向 | UI からは外す方向 |
-| Int8 × all | clipped | 同上 | UI からは外す方向 |
+| Int8 × cpuAndNE | clipped | (J) (K) F16 と同じ傾向 | 本番方針は未定。当面は UI に残す |
+| Int8 × all | clipped | 同上 | 本番方針は未定。当面は UI に残す |
 
-「ANE 経路全般を UI から外す」ではなく、「**HiFi-GAN を NE に dispatch させる構成だけ**外す」表現にする予定。F32 の cpuAndNE / all は dispatch 上 NE には行かないので、これらは外す対象に含めない。
+clipping を観測した構成についても、本番でどう扱うかは未定。方針が決まるまで **どのセルも UI から外さず、12 セル全てを選択可能なまま残す**。F32 の cpuAndNE / all は dispatch 上 NE には行かない点も観測として記録しておくが、これも UI からの除外対象ではない。
 
 ## 3. 実装提案項目（暫定）
 
@@ -68,18 +68,18 @@
 | retry | しない（warm-up で十分） | 0 |
 | fallback chain | しない（明示的な切替のみ） | なし |
 
-retry / fallback chain を入れない理由: Phase 1 で「F16/Int8 × cpuAndNE は決定論的に clipped」なので、同じ設定で retry しても結果は変わらない。fallback も「ユーザーが選んだ設定を勝手に変える」ことになり、研究用 UI の透明性を損なう。代わりに「UI から外す」で対応する。
+retry / fallback chain を入れない理由: Phase 1 で「F16/Int8 × cpuAndNE は決定論的に clipped」なので、同じ設定で retry しても結果は変わらない。fallback も「ユーザーが選んだ設定を勝手に変える」ことになり、研究用 UI の透明性を損なう。clipping する構成を本番でどう扱うかは未定で、方針が決まるまで UI からは外さない。
 
 ## 4. 残課題（方針確定の前提）
 
 1. **Phase 2 mini J の音質聴感判定** — `audio/iPhone_3_phase2mini_20260519/playable/*phase2_J_*` の wav を試聴し、正規化で音が救えるかを確認する。
 2. **Phase 2 mini K の音質聴感判定** — `*phase2_K_*` の wav を Phase 1 F16 × cpuAndGPU の wav と聴き比べる。同等なら K は確固たる救済策。
-3. **「UI から外す対象」の最終決定** — 「NE dispatch される構成」と表現するか「F16/Int8 × cpuAndNE / all」と列挙するかを決める。K を採用する場合は表現を分ける。
+3. **本番での扱いの最終決定** — clipping を観測した構成（F16/Int8 × cpuAndNE / all）を本番でどう扱うかは未定。方針が決まるまで UI からは外さず、全セルを選択可能なまま残す。決定は Phase 2 mini の聴感判定（J/K）が済んでから行う。
 4. **異常検出ログの実装** — `AudioSynthesizer.synthesize()` の末尾に既にある production log（rms/peak/NaN/Inf）はそのままで足りる。`SynthesisResult` を返した側で classification を出すかどうかは別途検討。
 
 ## 5. このドラフトの位置付け
 
 - 現時点では「これで本番に出して良い」と言える根拠は揃っていない。
-- 一方で「観測した範囲では F16 × cpuAndGPU を本番にして、ANE 系の F16/Int8 を外す」というラインは Phase 1 / 2 mini / 4 の観測全部と整合する。
+- 観測した範囲では F16 × cpuAndGPU を標準にする方向は Phase 1 / 2 mini / 4 の観測と整合するが、それ以外のセルを本番から外すかどうかは未定。方針が決まるまではどのセルも UI から外さない。
 - 残課題の (1) (2) は耳で聴く検証なので、ユーザー判定待ち。
 - (3) (4) はコード変更を伴うので、Phase 5 確定後に別タスクで進める。
