@@ -37,6 +37,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-05-19 | [coreml-hifigan-investigation-handoff](2026-05-19/coreml-hifigan-investigation-handoff.md) | /clear 後に調査を再開するための引き継ぎノート。確定事実・未確定事項・次にやることを整理 |
 | 2026-05-19 | [phase2-mini-rescue-results](2026-05-19/phase2-mini-rescue-results.md) | Phase 2 mini 救済実験。出力正規化（J）と HiFi-GAN だけ cpuAndGPU 退避（K）の効果を実機で計測。K は Decoder=ANE postnet sha が cpuAndNE 単独と bit-identical、HiFi-GAN dispatch だけで clipping が消える観測 |
 | 2026-05-19 | [phase5-implementation-policy-draft](2026-05-19/phase5-implementation-policy-draft.md) | Phase 5 実装方針のドラフト。Phase 1/2 mini/4 の観測を踏まえた設定別方針案・UI 設計案・残課題（聴感判定）の整理。確定ではない |
+| 2026-06-10 | [load-timing-results](2026-06-10/load-timing-results.md) | 12セルの3モデルロード時間を「初回/キャッシュ後」で実機計測（n=2）。ANE系HiFi-GAN(F16/Int8×{cpuAndNE,all})の初回特殊化が32-67秒or時々クラッシュ、CPU/GPU系8セルは初回約1秒、キャッシュ後は全セル約0.1秒。clippingで壊れる4セルと一致し「速い」軸と「壊れない」軸が同じANEセルを同時棄却 |
 
 ## トピック別
 
@@ -81,6 +82,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [stability-matrix-analysis](2026-05-19/stability-matrix-analysis.md)
 - [compute-plan-analysis](2026-05-19/compute-plan-analysis.md)
 - [phase2-mini-rescue-results](2026-05-19/phase2-mini-rescue-results.md)
+- [load-timing-results](2026-06-10/load-timing-results.md)
 
 ### ブランチ・PR まとめ
 

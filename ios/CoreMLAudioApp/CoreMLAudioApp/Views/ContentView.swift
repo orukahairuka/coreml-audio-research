@@ -197,6 +197,33 @@ struct ContentView: View {
                     }
                 }
 
+                // モデルロード時間計測 (12 セル, 初回 / キャッシュ後)
+                Button(
+                    action: { Task { await viewModel.runLoadTimingTest() } },
+                    label: {
+                        Label("モデルロード時間計測 (12セル)", systemImage: "timer")
+                            .frame(maxWidth: .infinity)
+                    }
+                )
+                .buttonStyle(.bordered)
+                .disabled(viewModel.isProcessing || viewModel.isRecording)
+                .accessibilityIdentifier("loadTimingTestButton")
+
+                if let summary = viewModel.loadTimingSummary {
+                    GroupBox("ロード時間計測結果") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(summary)
+                                .font(.caption)
+                            if let url = viewModel.loadTimingCsvURL {
+                                Text("CSV: \(url.lastPathComponent)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
                 // F16 fixed262 cpuAndGPU vs all 出力差分テスト
                 Button(
                     action: { Task { await viewModel.runVocoderDiffTest() } },
