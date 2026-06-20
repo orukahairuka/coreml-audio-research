@@ -88,6 +88,9 @@ class HookedGenerator:
                     xs = xs + res
             x = xs / g.num_kernels
             state[f"upsample_{i}_stage_out"] = x.detach().cpu().numpy().copy()
+        # conv_post 直前のこの活性化だけは、オリジナル HiFi-GAN (models.py Generator.forward)
+        # が slope を明示せず default(0.01) を使う仕様。実モデルを忠実に再現するため
+        # ここも LRELU_SLOPE(0.1) ではなく default のままにする（変更しないこと）。
         x = self.F.leaky_relu(x)
         state["pre_post_leaky"] = x.detach().cpu().numpy().copy()
         x = g.conv_post(x)
