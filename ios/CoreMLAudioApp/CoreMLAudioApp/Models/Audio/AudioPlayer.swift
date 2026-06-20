@@ -10,9 +10,34 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         player?.isPlaying ?? false
     }
 
+    override init() {
+        super.init()
+        #if os(iOS)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        #endif
+    }
+
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         onPlaybackFinished?()
     }
+
+    #if os(iOS)
+    /// 再生中に電話などで AVAudioSession が中断されると didFinishPlaying が呼ばれず、
+    /// playOutputAndAwaitCompletion の continuation が永久に resume されずハングする。
+    /// 中断開始を「再生終了」とみなして完了コールバックを発火し、待機側を解放する。
+    @objc private func handleInterruption(_ notification: Notification) {
+        guard let info = notification.userInfo,
+              let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+              AVAudioSession.InterruptionType(rawValue: raw) == .began else { return }
+        player?.stop()
+        onPlaybackFinished?()
+    }
+    #endif
 
     /// Float 波形配列から WAV を生成して再生する
     ///
@@ -83,22 +108,31 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         newPlayer.delegate = self
         newPlayer.volume = 1.0
         newPlayer.prepareToPlay()
-        newPlayer.play()
+        // play() は再生開始に失敗すると throw せず false を返す。ここで弾かないと
+        // didFinishPlaying が永久に来ず、呼び出し側の継続が宙吊りになる。
+        guard newPlayer.play() else {
+            throw PlaybackError.playbackStartFailed
+        }
         player = newPlayer
     }
 
+    /// 再生を止める。stop() では AVAudioPlayer の delegate (didFinishPlaying) が呼ばれないので、
+    /// 待機側 (continuation) を解放するため明示的に完了コールバックを呼ぶ。
     func stop() {
         player?.stop()
+        onPlaybackFinished?()
     }
 
     enum PlaybackError: LocalizedError {
         case formatCreationFailed
         case bufferCreationFailed
+        case playbackStartFailed
 
         var errorDescription: String? {
             switch self {
             case .formatCreationFailed: return "オーディオフォーマットの作成に失敗しました。"
             case .bufferCreationFailed: return "オーディオバッファの作成に失敗しました。"
+            case .playbackStartFailed: return "再生を開始できませんでした。"
             }
         }
     }
