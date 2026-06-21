@@ -5,13 +5,22 @@ venv/
 **/Input/*
 !**/Input/input_sample.wav
 metrics/
-figures/
+# figures/ 直下のデバイスベンチ出力(iPhone_3_*)は無視。スライド用図表(png/svg)とREADMEは追跡する
+/figures/*
+!/figures/*.png
+!/figures/*.svg
+!/figures/README.md
 audio/
 .DS_Store
 
 # Generated reference tensors (regeneratable via scripts/generate_*_reference.py)
 data/*/decoder_reference/
 data/*/hifigan_reference/
+data/*/pytorch_reference/
+
+# Generated investigation artifacts (regeneratable via scripts/compare_*.py)
+docs/**/plots/
+docs/**/hifigan_wav/
 
 # Scheduled task lock files
 .claude/scheduled_tasks.lock

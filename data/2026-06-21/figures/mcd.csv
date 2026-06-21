@@ -1,0 +1,13 @@
+rank,precision,compute_unit,mcd_db,group
+1,Float32,all,3.92,cpu_gpu_fallback
+2,Float32,cpuAndGPU,5.21,cpu_gpu
+3,Float32,cpuOnly,5.35,cpu_gpu
+4,Int8,cpuAndGPU,5.93,cpu_gpu
+5,Float32,cpuAndNE,6.58,cpu_gpu_fallback
+6,Float16,cpuAndGPU,6.59,cpu_gpu
+7,Int8,cpuOnly,6.60,cpu_gpu
+8,Float16,cpuOnly,6.63,cpu_gpu
+9,Float16,all,11.61,ane
+10,Float16,cpuAndNE,11.84,ane
+11,Int8,cpuAndNE,11.99,ane
+12,Int8,all,12.02,ane

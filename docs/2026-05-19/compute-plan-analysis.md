@@ -149,4 +149,4 @@ Phase 1 で各 run の `summary.txt` から `postnet_output` と `waveform_prede
 
 - 「ANE が悪い」とは断定できない。NE dispatch と clipping の相関は観測されているが、ANE 経路が直接の原因かは未確定
 - F32 は ANE 非対応なので「F32 × cpuAndNE / all で動いている」のは CPU/GPU fallback の結果
-- 本番アプリでの実用判断（F16 × cpuAndGPU 採用、F16/Int8 × {cpuAndNE, all} を外す等）と原因の op 特定は別の問題として扱う
+- 本番アプリでの実用判断（F16 × cpuAndGPU 採用など。clipping する F16/Int8 × {cpuAndNE, all} を本番でどう扱うかは未定で、方針が決まるまで UI からは外さない）と原因の op 特定は別の問題として扱う

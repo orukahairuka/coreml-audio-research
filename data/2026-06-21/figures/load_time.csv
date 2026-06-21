@@ -1,0 +1,13 @@
+precision,compute_unit,initial_run1_s,initial_run2_s,initial_mean_s,cached_ms,group,note
+Float32,cpuOnly,1.24,1.19,1.215,77,cpu_gpu,
+Float32,cpuAndGPU,0.93,0.96,0.945,120,cpu_gpu,
+Float32,cpuAndNE,0.88,0.80,0.840,81,cpu_gpu_fallback,F32はANE非対応で実態CPU/GPU
+Float32,all,1.02,1.00,1.010,120,cpu_gpu_fallback,F32はANE非対応で実態CPU/GPU
+Float16,cpuOnly,0.71,0.70,0.705,79,cpu_gpu,
+Float16,cpuAndGPU,0.65,0.67,0.660,105,cpu_gpu,
+Float16,cpuAndNE,56.63,60.18,58.405,195,ane,
+Float16,all,,36.69,36.690,189,ane,run1はロード中にクラッシュ(run2値を使用)
+Int8,cpuOnly,0.82,0.74,0.780,98,cpu_gpu,
+Int8,cpuAndGPU,0.69,0.83,0.760,120,cpu_gpu,
+Int8,cpuAndNE,56.55,68.86,62.705,196,ane,
+Int8,all,34.28,37.83,36.055,190,ane,
