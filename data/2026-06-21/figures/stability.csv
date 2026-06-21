@@ -1,0 +1,13 @@
+precision,compute_unit,status
+Float32,cpuOnly,normal
+Float32,cpuAndGPU,normal
+Float32,cpuAndNE,normal
+Float32,all,normal
+Float16,cpuOnly,normal
+Float16,cpuAndGPU,normal
+Float16,cpuAndNE,clipped
+Float16,all,clipped
+Int8,cpuOnly,normal
+Int8,cpuAndGPU,normal
+Int8,cpuAndNE,clipped
+Int8,all,clipped

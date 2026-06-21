@@ -1,0 +1,4 @@
+group_label,fast,robust,quality,verdict
+"CPU/GPU系\n(F32/F16/Int8 × cpuOnly, cpuAndGPU)",1,1,1,候補
+"F32 × cpuAndNE, all\n(実態 CPU/GPU フォールバック)",1,1,1,候補
+"F16/Int8 × cpuAndNE, all\n(HiFi-GAN が ANE 実行)",0,0,0,不成立
