@@ -39,6 +39,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-05-19 | [phase5-implementation-policy-draft](2026-05-19/phase5-implementation-policy-draft.md) | Phase 5 実装方針のドラフト。Phase 1/2 mini/4 の観測を踏まえた設定別方針案・UI 設計案・残課題（聴感判定）の整理。確定ではない |
 | 2026-06-08 | [interactive-feasibility-direction](2026-06-08/interactive-feasibility-direction.md) | `/grill-me` で研究方針を再整理。「12通り測って best を選ぶ＝開発」の罠を抜け、親論文 PronounSE が掲げた『その場でインタラクティブ』のモバイル成立を問う feasibility study に置き換え。成立＝速い・壊れない・使える音の同時成立、成果物は成立/不成立マップ＋落ちる理由。2026-05-10 を更新 |
 | 2026-06-10 | [load-timing-results](2026-06-10/load-timing-results.md) | 12セルの3モデルロード時間を「初回/キャッシュ後」で実機計測（n=2）。ANE系HiFi-GAN(F16/Int8×{cpuAndNE,all})の初回特殊化が32-67秒or時々クラッシュ、CPU/GPU系8セルは初回約1秒、キャッシュ後は全セル約0.1秒。clippingで壊れる4セルと一致し「速い」軸と「壊れない」軸が同じANEセルを同時棄却 |
+| 2026-06-21 | [audio-quality-mcd-results](2026-06-21/audio-quality-mcd-results.md) | 「使える音」軸を MCD（対 PyTorch baseline、pymcd dtw）で計測。CPU/GPU系8セルは3.9〜6.6dB に集中、ANE系4セル(F16/Int8×{cpuAndNE,all})は11.6〜12.0dB に隔離（約5dBギャップ）。3軸（速い・壊れない・使える音）が同じ4セルを同時棄却。ただし8セル内の順位は n=1 で未確定、最終は聴感 |
 
 ## トピック別
 
@@ -85,6 +86,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [compute-plan-analysis](2026-05-19/compute-plan-analysis.md)
 - [phase2-mini-rescue-results](2026-05-19/phase2-mini-rescue-results.md)
 - [load-timing-results](2026-06-10/load-timing-results.md)
+- [audio-quality-mcd-results](2026-06-21/audio-quality-mcd-results.md)
 
 ### ブランチ・PR まとめ
 
