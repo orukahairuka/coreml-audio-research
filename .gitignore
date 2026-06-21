@@ -12,6 +12,11 @@ audio/
 # Generated reference tensors (regeneratable via scripts/generate_*_reference.py)
 data/*/decoder_reference/
 data/*/hifigan_reference/
+data/*/pytorch_reference/
+
+# Generated investigation artifacts (regeneratable via scripts/compare_*.py)
+docs/**/plots/
+docs/**/hifigan_wav/
 
 # Scheduled task lock files
 .claude/scheduled_tasks.lock

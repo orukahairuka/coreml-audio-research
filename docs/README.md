@@ -40,6 +40,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-06-08 | [interactive-feasibility-direction](2026-06-08/interactive-feasibility-direction.md) | `/grill-me` で研究方針を再整理。「12通り測って best を選ぶ＝開発」の罠を抜け、親論文 PronounSE が掲げた『その場でインタラクティブ』のモバイル成立を問う feasibility study に置き換え。成立＝速い・壊れない・使える音の同時成立、成果物は成立/不成立マップ＋落ちる理由。2026-05-10 を更新 |
 | 2026-06-10 | [load-timing-results](2026-06-10/load-timing-results.md) | 12セルの3モデルロード時間を「初回/キャッシュ後」で実機計測（n=2）。ANE系HiFi-GAN(F16/Int8×{cpuAndNE,all})の初回特殊化が32-67秒or時々クラッシュ、CPU/GPU系8セルは初回約1秒、キャッシュ後は全セル約0.1秒。clippingで壊れる4セルと一致し「速い」軸と「壊れない」軸が同じANEセルを同時棄却 |
 | 2026-06-21 | [audio-quality-mcd-results](2026-06-21/audio-quality-mcd-results.md) | 「使える音」軸を MCD（対 PyTorch baseline、pymcd dtw）で計測。CPU/GPU系8セルは3.9〜6.6dB に集中、ANE系4セル(F16/Int8×{cpuAndNE,all})は11.6〜12.0dB に隔離（約5dBギャップ）。3軸（速い・壊れない・使える音）が同じ4セルを同時棄却。ただし8セル内の順位は n=1 で未確定、最終は聴感 |
+| 2026-06-21 | [ane-stage-isolation-breakdown](2026-06-21/ane-stage-isolation-breakdown.md) | ANE破綻が encoder/decoder/mel/HiFi-GAN/最終wave のどこで起きるかを境界横断で切り分け。実機 良(f16GPU) vs 壊れ run（mel_normalized が sha256 一致＝混入なし）で、mel/encoder/postnet は cosine≈1.0、**HiFi-GAN 出力波形だけ rms が約4.25倍に膨張して clipping**＝破綻はHiFi-GAN×NE段に限局。同一postnetを入れたHiFi-GAN単体実験(Mac)でもcpuAndNEだけ4.36倍で実機4.24倍と一致。iOS mel フロントエンドが librosa と非一致(262 vs 266, cos 0.92)も発見 |
 
 ## トピック別
 
@@ -52,6 +53,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [float32-gpu-accumulation-experiment](2026-04-27/float32-gpu-accumulation-experiment.md)
 - [fp32-cpuandgpu-quiet-vs-loud-investigation](2026-05-17/fp32-cpuandgpu-quiet-vs-loud-investigation.md)
 - [all-engine-precision-stability-plan](2026-05-19/all-engine-precision-stability-plan.md)
+- [ane-stage-isolation-breakdown](2026-06-21/ane-stage-isolation-breakdown.md)
 
 ### iOS 実装
 
