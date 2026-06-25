@@ -36,3 +36,4 @@ external/
 exports/
 __pycache__/
 *.pyc
+*.aimodel/
