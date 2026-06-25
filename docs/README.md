@@ -42,6 +42,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-06-21 | [audio-quality-mcd-results](2026-06-21/audio-quality-mcd-results.md) | 「使える音」軸を MCD（対 PyTorch baseline、pymcd dtw）で計測。CPU/GPU系8セルは3.9〜6.6dB に集中、ANE系4セル(F16/Int8×{cpuAndNE,all})は11.6〜12.0dB に隔離（約5dBギャップ）。3軸（速い・壊れない・使える音）が同じ4セルを同時棄却。ただし8セル内の順位は n=1 で未確定、最終は聴感 |
 | 2026-06-21 | [ane-stage-isolation-breakdown](2026-06-21/ane-stage-isolation-breakdown.md) | ANE破綻が encoder/decoder/mel/HiFi-GAN/最終wave のどこで起きるかを境界横断で切り分け。実機 良(f16GPU) vs 壊れ run（mel_normalized が sha256 一致＝混入なし）で、mel/encoder/postnet は cosine≈1.0、**HiFi-GAN 出力波形だけ rms が約4.25倍に膨張して clipping**＝破綻はHiFi-GAN×NE段に限局。同一postnetを入れたHiFi-GAN単体実験(Mac)でもcpuAndNEだけ4.36倍で実機4.24倍と一致。iOS mel フロントエンドが librosa と非一致(262 vs 266, cos 0.92)も発見 |
 | 2026-06-21 | [ios-feasibility-evaluation-report](2026-06-21/ios-feasibility-evaluation-report.md) | 3軸（①速い ②壊れない ③使える音）を1本に統合した実機評価レポート。12条件の成立マップ、各軸の結果、破綻箇所の切り分け、考察・結論・今後の課題まで。F16/Int8×{cpuAndNE,all}の4条件が3軸すべてで不成立、成立候補はCPU/GPU系に絞られる |
+| 2026-06-25 | [coreai-device-inference-design](2026-06-25/coreai-device-inference-design.md) | Phase 2 設計メモ。CoreML後継 Core AI に変換した `.aimodel` を iPhone(3)@27.0 で cpu/gpu/neuralEngine 比較する実機推論パスの設計。.aimodel一覧、追加ファイル、流用すべきCoreML既存実装、Core AIのload/compile/run、compute unit切替（SpecializationOptions.preferredComputeUnitKind）、最小構成はHiFi-GAN単体推奨、速度/PSNR/MCD/clipping記録方針。fp16はexport時でなく実行時compute unitで決まる点が鍵 |
 
 ## トピック別
 
@@ -55,6 +56,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [fp32-cpuandgpu-quiet-vs-loud-investigation](2026-05-17/fp32-cpuandgpu-quiet-vs-loud-investigation.md)
 - [all-engine-precision-stability-plan](2026-05-19/all-engine-precision-stability-plan.md)
 - [ane-stage-isolation-breakdown](2026-06-21/ane-stage-isolation-breakdown.md)
+- [coreai-device-inference-design](2026-06-25/coreai-device-inference-design.md)
 
 ### iOS 実装
 
