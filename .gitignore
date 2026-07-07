@@ -31,3 +31,9 @@ _tmp_logs/
 # Xcode
 *.xcuserstate
 xcuserdata/
+coreai_exports/
+external/
+exports/
+__pycache__/
+*.pyc
+*.aimodel/
