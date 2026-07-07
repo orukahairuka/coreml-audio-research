@@ -86,24 +86,27 @@ struct WaveformStatistics {
 
     /// PSNR(dB) = 20 * log10(peak / rmse)。peak = max(|reference|)。
     ///
-    /// 長さが違う場合は短い方に合わせる。non-finite が混じる場合は無限大を避けて nan を返す。
+    /// 長さが違う場合は短い方に合わせる。
+    ///
+    /// test/reference に non-finite (nan/inf) が **1つでも** 含まれる場合は nan を返す。
+    /// 有限サンプルだけで計算すると、大半が壊れた出力でも良好な PSNR が出て破綻を
+    /// 隠してしまう（このスタディが検出したい HiFi-GAN×NE の破綻がまさにそれ）。
+    /// non-finite の内訳は WaveformStatistics の nan_count / inf_count 列で別途記録される。
     static func psnr(reference: [Float], test: [Float]) -> Double {
         let n = Swift.min(reference.count, test.count)
         guard n > 0 else { return .nan }
         var sumSq = 0.0
         var peak = 0.0
-        var valid = 0
         for i in 0..<n {
             let r = reference[i]
             let t = test[i]
-            if r.isNaN || t.isNaN || r.isInfinite || t.isInfinite { continue }
+            if !r.isFinite || !t.isFinite { return .nan }
             let diff = Double(r) - Double(t)
             sumSq += diff * diff
             peak = Swift.max(peak, Double(abs(r)))
-            valid += 1
         }
-        guard valid > 0, peak > 0 else { return .nan }
-        let rmse = (sumSq / Double(valid)).squareRoot()
+        guard peak > 0 else { return .nan }
+        let rmse = (sumSq / Double(n)).squareRoot()
         if rmse == 0 { return .infinity }
         return 20.0 * log10(peak / rmse)
     }
