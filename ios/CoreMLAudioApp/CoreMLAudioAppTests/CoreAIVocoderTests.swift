@@ -43,8 +43,10 @@ struct CoreAIVocoderTests {
         let reference = try MinimalNpyReader.readFloat32(contentsOf: refURL)
         #expect(mel.count == Self.nMels * Self.frames, "mel 要素数が想定外: \(mel.count)")
         // 参照長が一致しないと psnr() が短い方に黙って切り詰め、妥当そうな偽 PSNR を出す。
-        #expect(reference.count == Self.frames * Self.hopSize,
-                "参照出力の要素数が想定外: \(reference.count) (期待 \(Self.frames * Self.hopSize))")
+        // #expect は失敗を記録するだけでテストを継続し偽 PSNR が CSV に書かれてしまうため、
+        // #require で PSNR 計算前に中断する。
+        try #require(reference.count == Self.frames * Self.hopSize,
+                     "参照出力の要素数が想定外: \(reference.count) (期待 \(Self.frames * Self.hopSize))")
         print("[CoreAIVocoderTests] mel=\(mel.count), reference=\(reference.count)")
 
         // --- 出力先 ---
