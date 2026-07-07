@@ -21,8 +21,14 @@ scripts/convert_hifigan.py の CoreML 版を Core AI に焼き直したもの。
 実行（uv が 3.11+ 隔離環境を自動構築。PronounSE の 3.9 venv では coreai-torch が
 入らないので uv 必須）:
 
-    uv run scripts/convert_hifigan_coreai.py --dtype float16 --frames 262
-    uv run scripts/convert_hifigan_coreai.py --dtype float32 --frames 262
+    uv run scripts/convert_hifigan_coreai.py --dtype float16 --frames 262 \
+        --mel-npy result/debug/<run>/postnet_output.npy
+    uv run scripts/convert_hifigan_coreai.py --dtype float32 --frames 262 \
+        --mel-npy result/debug/<run>/postnet_output.npy
+
+    参照入力は実 mel（postnet 出力）を --mel-npy で渡す。未指定だと乱数 mel に
+    フォールバックし、その場合の PSNR は「移植の数値等価性」しか測れず、本スタディの
+    主目的（実 mel での HiFi-GAN×NE クリップ破綻の再現）は測れない。
 
 注意:
 - coreai-torch は Python >= 3.11 が必要（PronounSE venv の 3.9 では不可）。
@@ -102,8 +108,33 @@ def save_reference(input_dir: Path, dtype_name: str, frames: int,
     print(f"[INFO] 参照入出力を保存: {ref_dir}")
 
 
+def load_reference_mel(mel_npy: Path, frames: int, dtype: torch.dtype) -> torch.Tensor:
+    """実 mel（postnet 出力）を HiFi-GAN 入力レイアウト (1, 256, T) で読む。
+
+    実機 debug snapshot の `postnet_output.npy`（[T, 256]）や、既に
+    [1, 256, T] / [1, T, 256] の npy を受け付け、いずれも (1, 256, frames) に整える。
+    参照入力を乱数にすると PSNR は「移植の数値等価性」しか測れず、本スタディの主目的
+    （実 mel での HiFi-GAN×NE クリップ破綻の再現）を測れないため、実 mel を渡せるようにする。
+    """
+    arr = np.load(mel_npy)
+    t = torch.from_numpy(arr).float().squeeze()  # 余分な batch 次元を落とす
+    if t.ndim != 2:
+        raise ValueError(f"mel npy は 2D（[T,256] か [256,T]）を想定: {tuple(t.shape)}")
+    # [256, T] へ整える（256=n_mels 側を先頭に）
+    if t.shape[0] == frames and t.shape[1] == 256:
+        t = t.transpose(0, 1)          # [T, 256] -> [256, T]
+    elif t.shape[0] == 256 and t.shape[1] == frames:
+        pass                            # 既に [256, T]
+    else:
+        raise ValueError(
+            f"mel npy の shape {tuple(t.shape)} が frames={frames}, n_mels=256 と不整合"
+        )
+    return t.unsqueeze(0).to(dtype).contiguous()  # (1, 256, T)
+
+
 def convert(output_dir: Path, dtype: torch.dtype, frames: int,
-            overwrite: bool, optimize: bool, save_ref: bool) -> None:
+            overwrite: bool, optimize: bool, save_ref: bool,
+            mel_npy: Path | None = None) -> None:
     dtype_name = str(dtype).split(".")[-1]
     print(f"\n=== 変換開始: dtype={dtype_name}, frames={frames} ===")
 
@@ -111,7 +142,16 @@ def convert(output_dir: Path, dtype: torch.dtype, frames: int,
     generator = load_generator(dtype)
 
     # 静的 shape（NE 要件）。mel: (1, 256, T)
-    mel = torch.randn(1, 256, frames, dtype=dtype)
+    # 参照照合を意味あるものにするため、可能なら実 mel（postnet 出力）を使う。
+    # --mel-npy 未指定時のみ乱数にフォールバック（グラフ trace は shape のみ依存で成立するが、
+    # その場合の PSNR は移植の等価性検証止まりで、実 mel でのクリップ破綻は測れない）。
+    if mel_npy is not None:
+        mel = load_reference_mel(mel_npy, frames, dtype)
+        print(f"[INFO] 実 mel を参照入力に使用: {mel_npy}")
+    else:
+        mel = torch.randn(1, 256, frames, dtype=dtype)
+        print("[WARN] --mel-npy 未指定: 乱数 mel を使用。PSNR は等価性検証のみで、"
+              "実 mel でのクリップ破綻は測れない。実スタディでは --mel-npy を渡すこと。")
 
     with torch.no_grad():
         pt_audio = generator(mel)
@@ -168,6 +208,9 @@ def main() -> None:
                         help="coreai_program.optimize() を呼ばない")
     parser.add_argument("--no-reference", action="store_true",
                         help="PyTorch 参照入出力の npy 保存をしない")
+    parser.add_argument("--mel-npy", default=None,
+                        help="参照入力に使う実 mel の npy（例: 実機 debug snapshot の "
+                             "postnet_output.npy）。未指定だと乱数 mel にフォールバックする")
     args = parser.parse_args()
 
     dtype = {"float16": torch.float16, "float32": torch.float32}[args.dtype]
@@ -178,6 +221,7 @@ def main() -> None:
         overwrite=args.overwrite,
         optimize=not args.no_optimize,
         save_ref=not args.no_reference,
+        mel_npy=Path(args.mel_npy) if args.mel_npy else None,
     )
 
 

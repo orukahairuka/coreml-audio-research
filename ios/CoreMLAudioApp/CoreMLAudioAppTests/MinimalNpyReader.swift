@@ -11,7 +11,9 @@ enum MinimalNpyReader {
 
     enum NpyError: Error {
         case badMagic
+        case unsupportedVersion(major: UInt8, minor: UInt8)
         case unsupportedDtype(String)
+        case fortranOrder
         case truncated
     }
 
@@ -24,18 +26,29 @@ enum MinimalNpyReader {
     static func readFloat32(data: Data) throws -> [Float] {
         // magic(6) + version(2) + headerLen(2, uint16 LE)
         guard data.count >= 10 else { throw NpyError.truncated }
+        // Data のスライスは元の index を保持するので、先頭からの絶対 offset で参照する。
+        let base = data.startIndex
         let magic: [UInt8] = [0x93, 0x4E, 0x55, 0x4D, 0x50, 0x59]  // \x93NUMPY
-        guard Array(data[0..<6]) == magic else { throw NpyError.badMagic }
+        guard Array(data[base ..< base + 6]) == magic else { throw NpyError.badMagic }
 
-        let headerLen = Int(data[8]) | (Int(data[9]) << 8)
+        // version。v1.0 のみ対応（headerLen は uint16=2byte）。v2.0+ は headerLen が uint32 で
+        // ここの読み取りがずれるため、黙って誤読せず弾く。
+        let major = data[base + 6]
+        let minor = data[base + 7]
+        guard major == 1 else { throw NpyError.unsupportedVersion(major: major, minor: minor) }
+
+        let headerLen = Int(data[base + 8]) | (Int(data[base + 9]) << 8)
         let headerStart = 10
         let dataStart = headerStart + headerLen
         guard data.count >= dataStart else { throw NpyError.truncated }
 
-        let header = String(decoding: data[headerStart..<dataStart], as: UTF8.self)
+        let header = String(decoding: data[base + headerStart ..< base + dataStart], as: UTF8.self)
         guard header.contains("'<f4'") || header.contains("\"<f4\"") else {
             throw NpyError.unsupportedDtype(header)
         }
+        // fortran_order: True だと列優先で、生バイトを row-major として読むと転置した値になる。
+        // np.save は C-contiguous 配列なら False を書くが、取り違え検出のため明示的に弾く。
+        guard !header.contains("'fortran_order': True") else { throw NpyError.fortranOrder }
 
         // npy `<f4` は little-endian。arm64 も little-endian なので生バイトをそのままコピーできる。
         let stride = MemoryLayout<Float32>.size

@@ -167,6 +167,8 @@ psnr_vs_pytorch
 - ANE 初回コンパイルの所要時間・クラッシュ（CoreML で観測した 32–56 秒 or 落ちる現象）の Core AI 版での有無。
 - `external/coreai-models/swift` を SPM 依存に足すか、`import CoreAI` だけで済ませるか（最小構成は後者狙い）。
 - compute unit が「preferred」＝NE に乗らず CPU/GPU に落ちることがある（residency で要確認。CoreML の「compiles but runs on CPU」と同じ罠）。
+- **Swift 経路（`CoreAIVocoderRunner` ほか）は未コンパイル**：`#if canImport(CoreAI)` ゲート下にあり、Mac(26) では CoreAI が import できず**一度もビルドされていない**。上記 SDK API（`NDArray` / `fn.run` / `consume` など）が実際のシグネチャと合うかは、**実機 iPhone@27 で初回ビルドが通るまで動作未保証**。最初のタスクはビルドを通すこと。
+- **参照入力は実 mel を使う**：`reference/hifigan_mel_*.npy` は乱数ではなく実機 debug snapshot の postnet 出力（`--mel-npy` で焼き込み済み）。乱数入力だと HiFi-GAN 出力がほぼ無音（rms≈0.002）になり、CoreML で観測した実 mel でのクリップ破綻（rms 約4.25倍）と並べられないため。乱数フォールバック時の PSNR は「移植の数値等価性」検証止まりである点に注意。
 
 ---
 

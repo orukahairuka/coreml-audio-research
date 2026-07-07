@@ -112,7 +112,9 @@ struct CoreAIVocoderTests {
     // MARK: - CSV
 
     private var csvHeader: String {
-        "model,precision,compute_unit,coreml_equiv,run_index,status,load_ms,predict_ms,psnr_db,"
+        // export_precision は .aimodel の export 精度（常に float32）。
+        // runtime_precision は実行時の実効精度（NE は fp16）。両者を混同しないため別列。
+        "model,export_precision,runtime_precision,compute_unit,coreml_equiv,run_index,status,load_ms,predict_ms,psnr_db,"
             + WaveformStatistics.csvHeader
     }
 
@@ -127,7 +129,8 @@ struct CoreAIVocoderTests {
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: ",", with: ";")
         return [
-            "HiFiGAN_Generator", "float32", unit.label, unit.coreMLEquivalentNote,
+            "HiFiGAN_Generator", "float32", unit.runtimePrecisionNote,
+            unit.label, unit.coreMLEquivalentNote,
             String(runIndex), safeStatus,
             String(format: "%.3f", loadMs),
             String(format: "%.3f", predictMs),

@@ -39,6 +39,18 @@ enum CoreAIComputeUnit: String, CaseIterable, Identifiable {
         }
     }
 
+    /// 実行時に実際に使われる精度の目安。
+    ///
+    /// `.aimodel` は fp32 で export しても、Neural Engine に dispatch されると本質的に
+    /// fp16 で実行される（CoreML と違い精度は export 時に焼かれず compute unit で決まる）。
+    /// CSV の `export_precision`（常に float32）と混同しないための別列。
+    var runtimePrecisionNote: String {
+        switch self {
+        case .cpu, .gpu:    return "fp32"
+        case .neuralEngine: return "fp16(NE)"
+        }
+    }
+
     /// Core AI の compute unit 種別。
     var kind: ComputeUnitKind {
         switch self {
