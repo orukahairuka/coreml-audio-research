@@ -42,6 +42,9 @@ struct CoreAIVocoderTests {
         let mel = try MinimalNpyReader.readFloat32(contentsOf: melURL)
         let reference = try MinimalNpyReader.readFloat32(contentsOf: refURL)
         #expect(mel.count == Self.nMels * Self.frames, "mel 要素数が想定外: \(mel.count)")
+        // 参照長が一致しないと psnr() が短い方に黙って切り詰め、妥当そうな偽 PSNR を出す。
+        #expect(reference.count == Self.frames * Self.hopSize,
+                "参照出力の要素数が想定外: \(reference.count) (期待 \(Self.frames * Self.hopSize))")
         print("[CoreAIVocoderTests] mel=\(mel.count), reference=\(reference.count)")
 
         // --- 出力先 ---
@@ -115,9 +118,15 @@ struct CoreAIVocoderTests {
         unit: CoreAIComputeUnit, runIndex: Int, status: String,
         loadMs: Double, predictMs: Double, psnr: Double, stats: WaveformStatistics
     ) -> String {
-        [
+        // status はエラー文をそのまま入れることがあり、カンマ/改行が混じると列がずれる。
+        // 一番見たい失敗行の CSV が壊れないよう、区切り文字を無害化してから書く。
+        let safeStatus = status
+            .replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: ",", with: ";")
+        return [
             "HiFiGAN_Generator", "float32", unit.label, unit.coreMLEquivalentNote,
-            String(runIndex), status,
+            String(runIndex), safeStatus,
             String(format: "%.3f", loadMs),
             String(format: "%.3f", predictMs),
             String(format: "%.3f", psnr),
