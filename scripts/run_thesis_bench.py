@@ -205,8 +205,14 @@ class Bench:
         """nominal に戻るまで待つ。(待った秒数, 最初に確認した状態) を返す"""
         started = time.monotonic()
         first = None
+        unknown_streak = 0
         while True:
             state = self.check_thermal(before_launch_id)
+            # thermal を読めないのは起動自体の失敗（署名・ロック・切断など）なので、待ち続けずに止める
+            unknown_streak = unknown_streak + 1 if state == "unknown" else 0
+            if unknown_streak >= 3:
+                raise SystemExit(f"thermal を 3 回続けて読めなかった（アプリを起動できていない）。"
+                                 f"logs/ の thermal のログを確認してください（{before_launch_id} の前）")
             if first is None:
                 first = state
                 if state == "nominal":
