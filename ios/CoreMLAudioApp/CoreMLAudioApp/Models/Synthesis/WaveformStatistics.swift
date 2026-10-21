@@ -21,6 +21,10 @@ struct WaveformStatistics {
     let ratioOver099: Double
     /// x < -0.99 の割合（負側 clipping 指標）。
     let ratioUnderMinus099: Double
+    /// |x| > 1 のサンプル数（16 ビットで保存したときに表せる範囲を超える）。
+    let over1Count: Int
+    /// |x| > 1 の割合（範囲の超過率）。0.99 判定とは別の指標。
+    let ratioAbsOver1: Double
 
     init(waveform: [Float]) {
         count = waveform.count
@@ -34,6 +38,7 @@ struct WaveformStatistics {
         var inf = 0
         var over = 0
         var under = 0
+        var absOver1 = 0
 
         for x in waveform {
             if x.isNaN {
@@ -51,6 +56,7 @@ struct WaveformStatistics {
             sumSq += Double(x) * Double(x)
             if x > 0.99 { over += 1 }
             if x < -0.99 { under += 1 }
+            if abs(x) > 1 { absOver1 += 1 }
         }
 
         finiteCount = finite
@@ -63,10 +69,12 @@ struct WaveformStatistics {
         let denom = Double(count > 0 ? count : 1)
         ratioOver099 = Double(over) / denom
         ratioUnderMinus099 = Double(under) / denom
+        over1Count = absOver1
+        ratioAbsOver1 = Double(absOver1) / denom
     }
 
     static var csvHeader: String {
-        "count,finite_count,min,max,mean,rms,nan_count,inf_count,ratio_over_099,ratio_under_minus_099"
+        "count,finite_count,min,max,mean,rms,nan_count,inf_count,ratio_over_099,ratio_under_minus_099,over1_count,ratio_abs_over_1"
     }
 
     var csvRow: String {
@@ -81,6 +89,8 @@ struct WaveformStatistics {
             String(infCount),
             String(format: "%.6f", ratioOver099),
             String(format: "%.6f", ratioUnderMinus099),
+            String(over1Count),
+            String(format: "%.6f", ratioAbsOver1),
         ].joined(separator: ",")
     }
 
