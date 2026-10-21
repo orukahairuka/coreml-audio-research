@@ -202,7 +202,7 @@ class Bench:
         return state
 
     def wait_nominal(self, before_launch_id: str) -> tuple[float, str]:
-        """nominal に戻るまで待つ。(待った秒数, 最初に確認した状態) を返す"""
+        """thermal が --thermal-ok-states（既定 nominal）に戻るまで待つ。(待った秒数, 最初に確認した状態) を返す"""
         started = time.monotonic()
         first = None
         unknown_streak = 0
@@ -215,11 +215,11 @@ class Bench:
                                  f"logs/ の thermal のログを確認してください（{before_launch_id} の前）")
             if first is None:
                 first = state
-                if state == "nominal":
+                if state in self.args.thermal_ok_states:
                     # 最初の確認で nominal なら待っていない（確認の起動にかかった時間は含めない）
                     return 0.0, first
             waited = time.monotonic() - started
-            if state == "nominal":
+            if state in self.args.thermal_ok_states:
                 return waited, first
             if waited > self.args.thermal_max_wait:
                 print(f"  thermal が {self.args.thermal_max_wait}s 待っても {state} のまま。そのまま進める")
@@ -325,6 +325,8 @@ def main() -> int:
     parser.add_argument("--thermal-poll", type=float, default=30)
     parser.add_argument("--thermal-max-wait", type=float, default=1800)
     parser.add_argument("--no-thermal-wait", action="store_true")
+    parser.add_argument("--thermal-ok-states", default="nominal",
+                        help="条件を始めてよい thermalState（カンマ区切り）。nominal まで下がらない端末では nominal,fair")
     parser.add_argument("--install", help="計測の前にインストールする .app のパス")
     parser.add_argument("--session", help="セッション ID（既定は日時）。続きから回すときは前回と同じ ID を渡す")
     parser.add_argument("--launch-start", type=int, default=1,
@@ -340,6 +342,7 @@ def main() -> int:
     args.session = args.session or f"{slug}_{stamp}"
     args.out_dir = args.out_dir or REPO_ROOT / "metrics" / f"thesis_ch4_{slug}_{stamp}" / "raw"
     args.phases = [p for p in args.phases.split(",") if p]
+    args.thermal_ok_states = [x for x in args.thermal_ok_states.split(",") if x]
     args.conditions = parse_conditions(args.conditions)
     args.timeout = {m: getattr(args, f"timeout_{m}") for m in DEFAULT_TIMEOUT}
     args.out_dir.mkdir(parents=True, exist_ok=True)
