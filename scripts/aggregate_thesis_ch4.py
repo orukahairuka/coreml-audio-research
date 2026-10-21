@@ -448,8 +448,7 @@ def fig_e2e(out: Path, s: dict) -> None:
     ax.bar(xs, other, w, bottom=synth, color=SERIES[1], label="それ以外（入力配列の準備など）", edgecolor="white", linewidth=1)
     ax.bar(xs, pre, w, bottom=synth + other, color=SERIES[2], label="前処理とデエンファシス", edgecolor="white", linewidth=1)
     audio = 256 * 262 / 22050
-    ax.axhline(audio, color=TEXT2, lw=1, ls="--")
-    ax.text(len(keys) - 0.5, audio, f"音声の長さ {audio:.2f} 秒", va="bottom", ha="right", fontsize=8, color=TEXT2)
+    ax.axhline(audio, color=TEXT2, lw=1, ls="--", label=f"音声の長さ（{audio:.2f} 秒）")
     ax.set_ylabel("時間 [秒]（入力1, 定常時の中央値）")
     ax.grid(axis="y", color=GRID, lw=0.8)
     ax.set_axisbelow(True)
