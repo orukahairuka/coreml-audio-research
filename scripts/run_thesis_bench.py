@@ -151,7 +151,8 @@ class Bench:
         self.logs.mkdir(parents=True, exist_ok=True)
         self.host_csv = self.out_dir / "host_runs.csv"
         self.thermal_csv = self.out_dir / "thermal_checks.csv"
-        self.launch_counter = 0
+        # 同じセッションを続きから回すとき、起動 ID（＝端末側のファイルの置き場所）が重ならないようにずらす
+        self.launch_counter = args.launch_start - 1
         self.after_install = bool(args.install)
 
     def next_launch_id(self, mode: str) -> str:
@@ -319,7 +320,9 @@ def main() -> int:
     parser.add_argument("--thermal-max-wait", type=float, default=1800)
     parser.add_argument("--no-thermal-wait", action="store_true")
     parser.add_argument("--install", help="計測の前にインストールする .app のパス")
-    parser.add_argument("--session", help="セッション ID（既定は日時）")
+    parser.add_argument("--session", help="セッション ID（既定は日時）。続きから回すときは前回と同じ ID を渡す")
+    parser.add_argument("--launch-start", type=int, default=1,
+                        help="起動 ID の開始番号。同じセッションを続きから回すときは前回より大きい番号にする")
     parser.add_argument("--out-dir", type=Path)
     for mode, sec in DEFAULT_TIMEOUT.items():
         parser.add_argument(f"--timeout-{mode}", type=float, default=sec)
@@ -334,7 +337,7 @@ def main() -> int:
     args.conditions = parse_conditions(args.conditions)
     args.timeout = {m: getattr(args, f"timeout_{m}") for m in DEFAULT_TIMEOUT}
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    (args.out_dir / "bench_args.json").write_text(json.dumps(
+    (args.out_dir / f"bench_args_{stamp}.json").write_text(json.dumps(
         {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(args).items()}, indent=2, ensure_ascii=False))
     print(f"session={args.session}  out={args.out_dir}")
     Bench(args, t).run()
