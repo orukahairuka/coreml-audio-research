@@ -27,6 +27,8 @@ struct ComputePlanInspector {
     let modelName: String
     let precision: ModelPrecision
     let computeUnits: ComputeUnitOption
+    /// 出力先ディレクトリ。nil なら `Documents/Result/debug/compute_plan/`
+    var outputDirectory: URL? = nil
 
     /// Dispatch を JSON ファイルに書き出し、結果サマリーを返す。
     @discardableResult
@@ -126,7 +128,7 @@ struct ComputePlanInspector {
     private func outputURL() throws -> URL {
         let fm = FileManager.default
         let docs = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let dir = docs
+        let dir = outputDirectory ?? docs
             .appendingPathComponent("Result", isDirectory: true)
             .appendingPathComponent("debug", isDirectory: true)
             .appendingPathComponent("compute_plan", isDirectory: true)
