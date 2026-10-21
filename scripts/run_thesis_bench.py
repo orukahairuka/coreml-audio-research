@@ -2,7 +2,9 @@
 """卒論第4章の計測を実機（またはシミュレータ）で回す。
 
 アプリを計測モード（環境変数 CMLA_THESIS_BENCH）で起動し直しながら、
-load → plan → infer → vocoder の順に 12 条件を測る。1 回の起動ごとに host_runs.csv に 1 行を書き、
+load → plan → infer → vocoder の順に 12 条件を測る。
+load は条件ごとに「インストールし直してから起動」を 3 回（インストール直後の初回の読み込み）と
+「起動し直すだけ」を 2 回（Core ML がディスクに残した準備結果を再利用する初回の読み込み）測る。1 回の起動ごとに host_runs.csv に 1 行を書き、
 アプリが THESIS_BENCH_DONE を出さずに終わった場合は crashed、時間内に終わらなければ timeout とする。
 条件を変える前に thermalState が nominal に戻るまで待ち、待った秒数も記録する。
 異常終了・時間切れがあっても、条件を外したりやり直したりはしない（そのまま次へ進む）。
@@ -20,7 +22,7 @@ load → plan → infer → vocoder の順に 12 条件を測る。1 回の起�
   # 本番（iPhone 13）
   scripts/run_thesis_bench.py --device "iPhone (3)" --install path/to/CoreMLAudioApp.app
   # シミュレータでスクリプトの動作確認
-  scripts/run_thesis_bench.py --simulator <UDID> --phases load --conditions Float32:cpuOnly --load-launches 1
+  scripts/run_thesis_bench.py --simulator <UDID> --phases infer --conditions Float32:cpuOnly --inputs 1
 """
 
 from __future__ import annotations
@@ -50,7 +52,7 @@ DEFAULT_TIMEOUT = {"load": 600, "plan": 600, "infer": 1800, "vocoder": 900, "the
 
 HOST_HEADER = [
     "session_id", "launch_id", "mode", "precision", "compute_units", "launch_index",
-    "after_install", "thermal_wait_sec", "thermal_at_start", "started_at", "ended_at",
+    "load_kind", "after_install", "thermal_wait_sec", "thermal_at_start", "started_at", "ended_at",
     "elapsed_sec", "status", "exit_code", "crumb", "log_path",
 ]
 THERMAL_HEADER = ["session_id", "checked_at", "before_launch_id", "state", "status"]
@@ -100,13 +102,20 @@ class Target:
             subprocess.run(["xcrun", "simctl", "terminate", self.simulator, BUNDLE_ID],
                            capture_output=True)
 
-    def install(self, app_path: Path) -> None:
+    def install(self, app_path: Path, attempts: int = 3) -> bool:
+        """インストールする。devicectl はまれに即座に失敗するので数回やり直す。成功したら True"""
         if self.device:
             cmd = ["xcrun", "devicectl", "device", "install", "app", "--device", self.device, str(app_path)]
         else:
             cmd = ["xcrun", "simctl", "install", self.simulator, str(app_path)]
-        print("$ " + " ".join(cmd))
-        subprocess.run(cmd, check=True)
+        for i in range(attempts):
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            ok = r.returncode == 0 and ("installationURL" in r.stdout or self.simulator)
+            if ok:
+                return True
+            print(f"  インストール失敗（{i + 1}/{attempts}）: {(r.stderr or r.stdout).strip()[-200:]}")
+            time.sleep(5)
+        return False
 
     def copy_from_documents(self, rel_path: str, dest: Path) -> bool:
         """Documents/<rel_path>（ディレクトリかファイル）を dest にコピーする"""
@@ -219,11 +228,17 @@ class Bench:
             files = list(Path(tmp).rglob("crumb_*.txt"))
             return files[0].read_text().strip() if files else ""
 
-    def run_one(self, mode: str, precision: str, cu: str, launch_index: int, wait_thermal: bool) -> None:
+    def run_one(self, mode: str, precision: str, cu: str, launch_index: int, wait_thermal: bool,
+                load_kind: str = "") -> None:
         launch_id = self.next_launch_id(mode)
         thermal_wait, thermal_state = (0.0, "")
         if wait_thermal:
             thermal_wait, thermal_state = self.wait_nominal(launch_id)
+        if load_kind == "after_install":
+            # thermal の確認でアプリを起動するので、インストールはその後（起動の直前）に行う
+            self.after_install = self.target.install(Path(self.args.install))
+            if not self.after_install:
+                load_kind = "install_failed"
         env = {
             "CMLA_THESIS_BENCH": mode, "CMLA_THESIS_SESSION": self.session,
             "CMLA_THESIS_LAUNCH": launch_id, "CMLA_THESIS_PRECISION": precision, "CMLA_THESIS_CU": cu,
@@ -240,7 +255,7 @@ class Bench:
         append_csv(self.host_csv, HOST_HEADER, {
             "session_id": self.session, "launch_id": launch_id, "mode": mode,
             "precision": precision, "compute_units": cu, "launch_index": launch_index,
-            "after_install": int(self.after_install), "thermal_wait_sec": f"{thermal_wait:.1f}",
+            "load_kind": load_kind, "after_install": int(self.after_install), "thermal_wait_sec": f"{thermal_wait:.1f}",
             "thermal_at_start": thermal_state, "started_at": started_at, "ended_at": now_iso(),
             "elapsed_sec": f"{elapsed:.1f}", "status": status,
             "exit_code": "" if exit_code is None else exit_code, "crumb": crumb,
@@ -249,15 +264,25 @@ class Bench:
         self.after_install = False
 
     def run(self) -> None:
-        if self.args.install:
-            self.target.install(Path(self.args.install))
+        if "load" in self.args.phases and self.args.load_install_launches > 0 and not self.args.install:
+            raise SystemExit("load でインストール直後を測るには --install が必要です")
+        if self.args.install and "load" not in self.args.phases:
+            if not self.target.install(Path(self.args.install)):
+                raise SystemExit("インストールに失敗しました")
+            self.after_install = True
         for mode in self.args.phases:
             print(f"===== {mode} =====")
             for precision, cu in self.args.conditions:
-                launches = self.args.load_launches if mode == "load" else 1
-                for i in range(1, launches + 1):
+                if mode == "load":
+                    # インストール直後の初回 × N（毎回入れ直す）→ 起動し直すだけの初回 × M
+                    kinds = (["after_install"] * self.args.load_install_launches
+                             + ["restart"] * self.args.load_restart_launches)
+                else:
+                    kinds = [""]
+                for i, kind in enumerate(kinds, start=1):
                     # 条件が変わるときだけ thermal を待つ（同じ条件の load の起動し直しの間は待たない）
-                    self.run_one(mode, precision, cu, i, wait_thermal=(i == 1 and not self.args.no_thermal_wait))
+                    self.run_one(mode, precision, cu, i, wait_thermal=(i == 1 and not self.args.no_thermal_wait),
+                                 load_kind=kind)
         print("===== 結果を吸い出す =====")
         ok = self.target.copy_from_documents(f"Result/thesis/{self.session}", self.out_dir / "device")
         print("  → " + ("OK " + str(self.out_dir / "device") if ok else "失敗（手で copy from してください）"))
@@ -283,7 +308,10 @@ def main() -> int:
     parser.add_argument("--phases", default="load,plan,infer,vocoder")
     parser.add_argument("--conditions", help="Float32:cpuOnly,... 既定は 12 条件（ANE を使う条件が後）")
     parser.add_argument("--inputs", help="入力の名前をカンマ区切りで（既定はアプリの thesis_inputs.json の順）")
-    parser.add_argument("--load-launches", type=int, default=3, help="load で条件ごとに起動し直す回数")
+    parser.add_argument("--load-install-launches", type=int, default=3,
+                        help="load で条件ごとに「インストールし直してから起動」する回数")
+    parser.add_argument("--load-restart-launches", type=int, default=2,
+                        help="load で条件ごとに、その後「起動し直すだけ」の回数")
     parser.add_argument("--reloads", type=int, default=5)
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--steady", type=int, default=5)
