@@ -5,7 +5,7 @@
 load → plan → infer → vocoder の順に 12 条件を測る。
 load は条件ごとに「インストールし直してから起動」を 3 回（インストール直後の初回の読み込み）と
 「起動し直すだけ」を 2 回（Core ML がディスクに残した準備結果を再利用する初回の読み込み）測る。1 回の起動ごとに host_runs.csv に 1 行を書き、
-アプリが THESIS_BENCH_DONE を出さずに終わった場合は crashed、時間内に終わらなければ timeout とする。
+アプリが THESIS_BENCH_DONE を出さずに終わった場合は crashed（始まる前に失敗したら launch_failed）、時間内に終わらなければ timeout とする。
 条件を変える前に thermalState が nominal に戻るまで待ち、待った秒数も記録する。
 異常終了・時間切れがあっても、条件を外したりやり直したりはしない（そのまま次へ進む）。
 
@@ -184,6 +184,9 @@ class Bench:
             status = "ok"
         elif "THESIS_BENCH_DONE status=" in text:
             status = "failed"
+        elif "THESIS_BENCH_START" not in text:
+            # アプリが始まる前に devicectl 側で失敗した（通信の切断・署名の拒否など）
+            status = "launch_failed"
         else:
             status = "crashed"
         return status, exit_code, text, elapsed
