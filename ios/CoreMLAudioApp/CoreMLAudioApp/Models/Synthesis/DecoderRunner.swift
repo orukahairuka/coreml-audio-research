@@ -24,14 +24,18 @@ final class DecoderRunner {
     ///   - onStep: 各ステップ完了時に呼ばれる (引数は完了済みステップ数, 1-indexed)
     ///   - debug: 調査用 snapshot (nil なら何もしない)。各 step の mel_out / postnet_out の
     ///            sha256 + stats を `decoder_steps.csv` に追記する。
-    /// - Returns: 最終ステップの postnet 出力、選別された各ステップの統計、`predict()` 全ステップ合計の所要時間 (ms)
+    /// - Returns: 最終ステップの postnet 出力、選別された各ステップの統計、`predict()` 全ステップ合計の所要時間 (ms)、
+    ///            各ステップの `predict()` 所要時間 (ms)、入力 decoder_input に含まれた NaN/Inf 個数の全ステップ最大値
     func run(
         memory: MLMultiArray,
         frameCount: Int,
         nMels: Int,
         onStep: @MainActor (Int) -> Void,
         debug: DebugRunSnapshot? = nil
-    ) async throws -> (postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double) {
+    ) async throws -> (
+        postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
+        stepPredictMs: [Double], maxInputNonFiniteCount: Int
+    ) {
         // 初期入力: ゼロベクトル [1, 1, 256]（最初の 1 フレームぶん）
         var decoderInputData = [Float](repeating: 0, count: nMels)
         var currentLength = 1
@@ -39,6 +43,8 @@ final class DecoderRunner {
         var lastPostnetOut: MLMultiArray?
         var stepStats = [DecoderStepStats]()
         var totalPredictMs: Double = 0
+        var stepPredictMs = [Double]()
+        var maxInputNonFiniteCount = 0
         let maxLength: Int
         let fixedLength: Int?
         switch policy {
@@ -66,6 +72,7 @@ final class DecoderRunner {
             let nonFiniteCount = try ModelInputArray.validateFloat32(
                 decInput, paddingRanges: [(currentLength * nMels)..<(inputLength * nMels)], name: "Decoder input"
             )
+            maxInputNonFiniteCount = max(maxInputNonFiniteCount, nonFiniteCount)
             if nonFiniteCount > 0 {
                 print("[DecoderRunner] WARN: step=\(step) decoder_input contains \(nonFiniteCount) NaN/Inf values")
             }
@@ -83,7 +90,9 @@ final class DecoderRunner {
             ])
             let t0 = CFAbsoluteTimeGetCurrent()
             let output = try await model.prediction(from: input)
-            totalPredictMs += (CFAbsoluteTimeGetCurrent() - t0) * 1000
+            let stepMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+            totalPredictMs += stepMs
+            stepPredictMs.append(stepMs)
 
             // mel_out は変換時に明示命名済み。postnet 出力は残りのキーから取得
             let postnetKey = output.featureNames.first(where: { $0 != "mel_out" }) ?? ""
@@ -131,6 +140,6 @@ final class DecoderRunner {
         guard let postnetOut = lastPostnetOut else {
             throw AudioSynthesizer.SynthesisError.decoderFailed
         }
-        return (postnetOut, stepStats, totalPredictMs)
+        return (postnetOut, stepStats, totalPredictMs, stepPredictMs, maxInputNonFiniteCount)
     }
 }
