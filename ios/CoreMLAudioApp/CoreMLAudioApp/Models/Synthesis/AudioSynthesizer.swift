@@ -147,7 +147,7 @@ final class AudioSynthesizer {
             print("[AudioSynthesizer] WARN: frameCount=\(frameCount) > policy max, cropped to \(effectiveFrameCount)")
         }
         let encoderRunner = EncoderRunner(model: encoder, policy: transformerPolicy)
-        let (memory, encoderMs) = try await encoderRunner.run(mel: melData, frameCount: effectiveFrameCount, nMels: nMels)
+        let (memory, encoderMs, _) = try await encoderRunner.run(mel: melData, frameCount: effectiveFrameCount, nMels: nMels)
         let encoderStats = ArrayStats.compute(from: memory)
 
         // 調査用: Encoder 出力 (memory) を [T_src × hidden] で書き出す。
@@ -171,7 +171,7 @@ final class AudioSynthesizer {
         // 3. Decoder (自己回帰ループ)
         await MainActor.run { onProgress("Decoder 実行中... (0/\(effectiveFrameCount))", 0.1) }
         let decoderRunner = DecoderRunner(model: decoder, policy: transformerPolicy)
-        let (postnetOut, decoderStepStats, decoderTotalMs) = try await decoderRunner.run(
+        let (postnetOut, decoderStepStats, decoderTotalMs, _, _) = try await decoderRunner.run(
             memory: memory,
             frameCount: effectiveFrameCount,
             nMels: nMels,

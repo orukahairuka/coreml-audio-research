@@ -26,8 +26,10 @@ final class VocoderRunner {
     ///   - totalFrames: T (時間方向のフレーム数)
     ///   - nMels: メルビン数 (256)
     /// - Returns: 合成波形 (デエンファシス前の生 PCM, 22050 Hz, 長さ = `contentT * hopSize`),
-    ///            `predict()` の所要時間 (ms), モデルに渡した実効 T (`inputT`)
-    func run(postnetOut: MLMultiArray, totalFrames: Int, nMels: Int) async throws -> (waveform: [Float], predictMs: Double, inputT: Int) {
+    ///            `predict()` の所要時間 (ms), モデルに渡した実効 T (`inputT`), 入力メルに含まれた NaN/Inf の個数
+    func run(postnetOut: MLMultiArray, totalFrames: Int, nMels: Int) async throws -> (
+        waveform: [Float], predictMs: Double, inputT: Int, inputNonFiniteCount: Int
+    ) {
         // policy に応じてモデルへ渡す T (inputT) と「中身のあるフレーム数」(contentT) を決める。
         // contentT 以降は zero-pad なので、出力波形もここまでで切り出す。
         let inputT: Int
@@ -90,6 +92,6 @@ final class VocoderRunner {
         for i in 0..<sampleCount {
             waveform[i] = waveformArray[i].floatValue
         }
-        return (waveform, predictMs, inputT)
+        return (waveform, predictMs, inputT, nonFiniteCount)
     }
 }

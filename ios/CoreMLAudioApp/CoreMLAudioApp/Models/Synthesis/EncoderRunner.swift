@@ -18,8 +18,10 @@ final class EncoderRunner {
     ///   - mel: 入力メル [T × nMels] を行優先で並べた配列
     ///   - frameCount: T (時間方向のフレーム数)
     ///   - nMels: メルビン数 (256)
-    /// - Returns: Encoder 出力の memory と、`predict()` の所要時間 (ms)
-    func run(mel: [Float], frameCount: Int, nMels: Int) async throws -> (memory: MLMultiArray, predictMs: Double) {
+    /// - Returns: Encoder 出力の memory、`predict()` の所要時間 (ms)、入力メルに含まれた NaN/Inf の個数
+    func run(mel: [Float], frameCount: Int, nMels: Int) async throws -> (
+        memory: MLMultiArray, predictMs: Double, inputNonFiniteCount: Int
+    ) {
         let inputT: Int
         let contentT: Int
         switch policy {
@@ -70,6 +72,6 @@ final class EncoderRunner {
               let memory = memoryFeature.multiArrayValue else {
             throw AudioSynthesizer.SynthesisError.decoderFailed
         }
-        return (memory, predictMs)
+        return (memory, predictMs, nonFiniteCount)
     }
 }
