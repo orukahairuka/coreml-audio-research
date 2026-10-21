@@ -17,6 +17,8 @@ audio/
 data/*/decoder_reference/
 data/*/hifigan_reference/
 data/*/pytorch_reference/
+# 卒論第4章の入力（ASJ152 デモからダウンロードする。再配布しない）
+data/thesis_ch4/inputs/
 
 # Generated investigation artifacts (regeneratable via scripts/compare_*.py)
 docs/**/plots/
