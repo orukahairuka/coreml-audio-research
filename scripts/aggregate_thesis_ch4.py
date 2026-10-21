@@ -45,6 +45,9 @@ SERIES = ["#2a78d6", "#eb6834", "#1baf7a"]
 TEXT = "#0b0b0b"
 TEXT2 = "#52514e"
 GRID = "#e4e3df"
+# 論文に貼る図はキャプションを本文側に書くので、図の中のタイトルを省く（--no-titles）
+SHOW_TITLES = True
+
 SEQ = LinearSegmentedColormap.from_list("seq_blue", ["#f3f7fd", "#9ec1ee", "#2a78d6", "#0d3a73"])
 
 plt.rcParams.update({
@@ -381,7 +384,8 @@ def fig_load(out: Path, s: dict) -> None:
     ax.grid(axis="y", color=GRID, lw=0.8)
     _cond_ticks(ax)
     ax.legend(frameon=False, fontsize=8, ncol=3, loc="upper left")
-    ax.set_title("モデルの読み込み時間（中央値と最小〜最大）", fontsize=10, loc="left")
+    if SHOW_TITLES:
+        ax.set_title("モデルの読み込み時間（中央値と最小〜最大）", fontsize=10, loc="left")
     fig.tight_layout()
     fig.savefig(out / "4-2-1_load.png")
     plt.close(fig)
@@ -399,7 +403,8 @@ def fig_rtf(out: Path, s: dict) -> None:
     ax.grid(axis="y", color=GRID, lw=0.8)
     _cond_ticks(ax)
     ax.legend(frameon=False, fontsize=8, loc="upper left")
-    ax.set_title("合成の RTF（中央値と最小〜最大）", fontsize=10, loc="left")
+    if SHOW_TITLES:
+        ax.set_title("合成の RTF（中央値と最小〜最大）", fontsize=10, loc="left")
     fig.tight_layout()
     fig.savefig(out / "4-2-2_rtf.png")
     plt.close(fig)
@@ -427,7 +432,8 @@ def fig_heatmap(out: Path, table: dict, metric: str, title: str, fname: str, fmt
     ax.set_yticklabels([cond_label(p, cu) for p, cu in CONDITIONS], fontsize=8)
     for i in (2.5, 5.5, 8.5):
         ax.axhline(i, color="white", lw=2)
-    ax.set_title(title, fontsize=10, loc="left")
+    if SHOW_TITLES:
+        ax.set_title(title, fontsize=10, loc="left")
     fig.colorbar(im, ax=ax, fraction=0.04, pad=0.03)
     fig.tight_layout()
     fig.savefig(out / fname)
@@ -455,7 +461,8 @@ def fig_e2e(out: Path, s: dict) -> None:
     ax.set_xticks(xs)
     ax.set_xticklabels([f"{p}\n{cu}" for p, cu in keys], fontsize=7)
     ax.legend(frameon=False, fontsize=8, loc="upper left")
-    ax.set_title("End-to-End 時間の内訳", fontsize=10, loc="left")
+    if SHOW_TITLES:
+        ax.set_title("End-to-End 時間の内訳", fontsize=10, loc="left")
     fig.tight_layout()
     fig.savefig(out / "4-2-5_e2e.png")
     plt.close(fig)
@@ -466,13 +473,17 @@ def fig_e2e(out: Path, s: dict) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("bench_dir", type=Path, help="metrics/thesis_ch4_<端末>_<日時>（raw/ を含む）")
+    parser.add_argument("--no-titles", action="store_true", help="図の中のタイトルを省く（論文用）")
+    parser.add_argument("--figures-dir", type=Path, help="図の出力先（既定は <計測ディレクトリ>/figures）")
     args = parser.parse_args()
+    global SHOW_TITLES
+    SHOW_TITLES = not args.no_titles
     raw = args.bench_dir / "raw"
     device = raw / "device"
     tables = args.bench_dir / "tables"
-    figures = args.bench_dir / "figures"
+    figures = args.figures_dir or args.bench_dir / "figures"
     tables.mkdir(exist_ok=True)
-    figures.mkdir(exist_ok=True)
+    figures.mkdir(parents=True, exist_ok=True)
 
     host = read_csv(raw / "host_runs.csv")
     load = read_csv(device / "load_runs.csv")
