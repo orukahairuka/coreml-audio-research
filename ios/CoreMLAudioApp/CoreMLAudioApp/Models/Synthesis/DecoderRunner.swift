@@ -57,10 +57,14 @@ final class DecoderRunner {
         for step in 0..<effectiveFrameCount {
             // decoder_input: [1, currentLength, 256]
             let inputLength = fixedLength ?? currentLength
-            let decInput = try MLMultiArray(shape: [1, inputLength as NSNumber, nMels as NSNumber], dataType: .float32)
+            // 固定長では先頭 currentLength フレームだけ書き込むので、残り（未生成の部分）は 0 で埋めておく
+            let decInput = try ModelInputArray.zeros(shape: [1, inputLength, nMels], dataType: .float32)
             for i in 0..<(currentLength * nMels) {
                 decInput[i] = NSNumber(value: decoderInputData[i])
             }
+            try ModelInputArray.validateFloat32(
+                decInput, paddingRanges: [(currentLength * nMels)..<(inputLength * nMels)], name: "Decoder input"
+            )
 
             // pos: [1, currentLength]
             let decPos = try MLMultiArray(shape: [1, inputLength as NSNumber], dataType: .int32)

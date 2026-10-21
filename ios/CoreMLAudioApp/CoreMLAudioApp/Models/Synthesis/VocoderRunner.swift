@@ -50,16 +50,19 @@ final class VocoderRunner {
         }
 
         // 1. 転置 + pad/crop: [1, T, nMels] → [1, nMels, inputT]
-        //    MLMultiArray は初期値 0 なので、contentT より後ろは zero のまま残る (fixed 用)
-        let input = try MLMultiArray(
-            shape: [1, nMels as NSNumber, inputT as NSNumber],
-            dataType: .float32
-        )
+        //    MLMultiArray は確保しただけでは中身が不定なので 0 で埋め、contentT より後ろを zero-pad にする (fixed 用)
+        let input = try ModelInputArray.zeros(shape: [1, nMels, inputT], dataType: .float32)
         for t in 0..<contentT {
             for m in 0..<nMels {
                 input[[0, m as NSNumber, t as NSNumber]] = postnetOut[[0, t as NSNumber, m as NSNumber]]
             }
         }
+        // 各メル帯域の行 [m * inputT + contentT, (m + 1) * inputT) が 0 のままのはず
+        try ModelInputArray.validateFloat32(
+            input,
+            paddingRanges: (0..<nMels).map { m in (m * inputT + contentT)..<((m + 1) * inputT) },
+            name: "HiFi-GAN mel"
+        )
         print("[VocoderRunner] mel shape: \(input.shape) (T=\(totalFrames), inputT=\(inputT), contentT=\(contentT), nMels=\(nMels))")
 
         // 2. CoreML predict (時間計測は predict 呼び出しのみ)
