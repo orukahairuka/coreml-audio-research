@@ -38,13 +38,21 @@ struct ModelInputArrayTests {
         }
     }
 
+    /// 書き込み済みの部分の NaN/Inf は不安定な条件の観測対象なので、例外にせず個数を返す
     @Test(arguments: [Float.nan, Float.infinity, -Float.infinity])
-    func validateRejectsNonFiniteValues(value: Float) throws {
+    func validateCountsNonFiniteContentWithoutThrowing(value: Float) throws {
         let array = try ModelInputArray.zeros(shape: [1, 4, 3], dataType: .float32)
         array[2] = NSNumber(value: value)  // 書き込み済みの部分に混入
-        #expect(throws: ModelInputArray.ValidationError.self) {
-            try ModelInputArray.validateFloat32(array, paddingRanges: [6..<12], name: "test")
-        }
+        array[5] = NSNumber(value: value)
+        let nonFiniteCount = try ModelInputArray.validateFloat32(array, paddingRanges: [6..<12], name: "test")
+        #expect(nonFiniteCount == 2)
+    }
+
+    @Test func validateReturnsZeroForFiniteContent() throws {
+        let array = try ModelInputArray.zeros(shape: [1, 4, 3], dataType: .float32)
+        for i in 0..<6 { array[i] = NSNumber(value: Float(i) - 2.5) }
+        let nonFiniteCount = try ModelInputArray.validateFloat32(array, paddingRanges: [6..<12], name: "test")
+        #expect(nonFiniteCount == 0)
     }
 
     @Test func validateRejectsNaNInPadding() throws {

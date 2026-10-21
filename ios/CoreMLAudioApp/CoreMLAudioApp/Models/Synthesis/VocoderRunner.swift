@@ -58,11 +58,15 @@ final class VocoderRunner {
             }
         }
         // 各メル帯域の行 [m * inputT + contentT, (m + 1) * inputT) が 0 のままのはず
-        try ModelInputArray.validateFloat32(
+        // Decoder 出力が NaN/Inf でも止めない（HiFi-GAN 出力の NaN/Inf として記録するため）
+        let nonFiniteCount = try ModelInputArray.validateFloat32(
             input,
             paddingRanges: (0..<nMels).map { m in (m * inputT + contentT)..<((m + 1) * inputT) },
             name: "HiFi-GAN mel"
         )
+        if nonFiniteCount > 0 {
+            print("[VocoderRunner] WARN: mel contains \(nonFiniteCount) NaN/Inf values")
+        }
         print("[VocoderRunner] mel shape: \(input.shape) (T=\(totalFrames), inputT=\(inputT), contentT=\(contentT), nMels=\(nMels))")
 
         // 2. CoreML predict (時間計測は predict 呼び出しのみ)

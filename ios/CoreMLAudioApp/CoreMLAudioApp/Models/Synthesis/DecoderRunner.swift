@@ -62,9 +62,13 @@ final class DecoderRunner {
             for i in 0..<(currentLength * nMels) {
                 decInput[i] = NSNumber(value: decoderInputData[i])
             }
-            try ModelInputArray.validateFloat32(
+            // 前ステップの出力が NaN/Inf でも止めない（不安定な条件の観測を後段まで残すため）
+            let nonFiniteCount = try ModelInputArray.validateFloat32(
                 decInput, paddingRanges: [(currentLength * nMels)..<(inputLength * nMels)], name: "Decoder input"
             )
+            if nonFiniteCount > 0 {
+                print("[DecoderRunner] WARN: step=\(step) decoder_input contains \(nonFiniteCount) NaN/Inf values")
+            }
 
             // pos: [1, currentLength]
             let decPos = try MLMultiArray(shape: [1, inputLength as NSNumber], dataType: .int32)

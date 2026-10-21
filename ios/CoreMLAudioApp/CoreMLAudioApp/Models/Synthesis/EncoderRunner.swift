@@ -43,9 +43,12 @@ final class EncoderRunner {
         for i in 0..<(contentT * nMels) {
             melArray[i] = NSNumber(value: mel[i])
         }
-        try ModelInputArray.validateFloat32(
+        let nonFiniteCount = try ModelInputArray.validateFloat32(
             melArray, paddingRanges: [(contentT * nMels)..<(inputT * nMels)], name: "Encoder mel"
         )
+        if nonFiniteCount > 0 {
+            print("[EncoderRunner] WARN: input mel contains \(nonFiniteCount) NaN/Inf values")
+        }
 
         // 入力 pos: [1, T] に 1, 2, ..., T を詰める（位置エンコーディング用）
         let posArray = try MLMultiArray(shape: [1, inputT as NSNumber], dataType: .int32)
