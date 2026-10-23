@@ -375,12 +375,12 @@ def _range_marks(ax, xs, stats, color, label):
 
 def fig_load(out: Path, s: dict) -> None:
     fig, ax = plt.subplots(figsize=(10, 4.2))
-    labels = {"after_install": "インストール直後の初回", "restart": "起動し直しただけの初回", "reload": "再読み込み"}
+    labels = {"after_install": "インストール直後の初回", "restart": "起動し直した後の初回", "reload": "再読み込み"}
     for k, (kind, color) in enumerate(zip(labels, SERIES)):
         xs = np.arange(len(CONDITIONS)) + (k - 1) * 0.22
         _range_marks(ax, xs, [s.get((p, cu, kind), summarize([])) for p, cu in CONDITIONS], color, labels[kind])
     ax.set_yscale("log")
-    ax.set_ylabel("3 モデルの読み込み時間 [ms]（対数）")
+    ax.set_ylabel("3つのモデルの読み込み時間の合計 [ms]（対数）")
     ax.grid(axis="y", color=GRID, lw=0.8)
     _cond_ticks(ax)
     ax.legend(frameon=False, fontsize=8, ncol=3, loc="upper left")
@@ -398,7 +398,7 @@ def fig_rtf(out: Path, s: dict) -> None:
     _range_marks(ax, xs + 0.12, [s[(p, cu)][("rtf", "initial")] for p, cu in CONDITIONS], SERIES[1], "初回の推論（入力1）")
     ax.axhline(1.0, color=TEXT2, lw=1, ls="--", zorder=1)
     ax.text(len(CONDITIONS) - 0.5, 1.0, "RTF = 1", va="bottom", ha="right", fontsize=8, color=TEXT2)
-    ax.set_ylabel("RTF（合成時間 ÷ 音声の長さ）")
+    ax.set_ylabel("RTF（合成の推論時間 ÷ 合成音の長さ）")
     ax.set_ylim(bottom=0)
     ax.grid(axis="y", color=GRID, lw=0.8)
     _cond_ticks(ax)
@@ -450,11 +450,11 @@ def fig_e2e(out: Path, s: dict) -> None:
     other = np.array([s[(p, cu, INPUTS[0])]["other"] for p, cu in keys]) / 1000
     pre = np.array([s[(p, cu, INPUTS[0])]["preprocess_ms"] + s[(p, cu, INPUTS[0])]["deemph_ms"] for p, cu in keys]) / 1000
     w = 0.6
-    ax.bar(xs, synth, w, color=SERIES[0], label="合成（モデルの呼び出し）", edgecolor="white", linewidth=1)
+    ax.bar(xs, synth, w, color=SERIES[0], label="合成の推論（モデルの呼び出し）", edgecolor="white", linewidth=1)
     ax.bar(xs, other, w, bottom=synth, color=SERIES[1], label="それ以外（入力配列の準備など）", edgecolor="white", linewidth=1)
-    ax.bar(xs, pre, w, bottom=synth + other, color=SERIES[2], label="前処理とデエンファシス", edgecolor="white", linewidth=1)
+    ax.bar(xs, pre, w, bottom=synth + other, color=SERIES[2], edgecolor="white", linewidth=1)  # 約 30 ms で棒が見えないので凡例に出さない
     audio = 256 * 262 / 22050
-    ax.axhline(audio, color=TEXT2, lw=1, ls="--", label=f"音声の長さ（{audio:.2f} 秒）")
+    ax.axhline(audio, color=TEXT2, lw=1, ls="--", label=f"合成音の長さ（{audio:.2f} 秒）")
     ax.set_ylabel("時間 [秒]（入力1, 定常時の中央値）")
     ax.grid(axis="y", color=GRID, lw=0.8)
     ax.set_axisbelow(True)
