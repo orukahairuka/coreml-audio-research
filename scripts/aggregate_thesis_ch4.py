@@ -39,6 +39,8 @@ PRECISIONS = ["Float32", "Float16", "Int8"]
 COMPUTE_UNITS = ["cpuOnly", "cpuAndGPU", "cpuAndNE", "all"]
 CONDITIONS = [(p, cu) for cu in COMPUTE_UNITS for p in PRECISIONS]
 INPUTS = ["1", "6", "11", "2"]
+# 論文では計測した順に入力1〜4と呼ぶ（キーはデモページのファイル名の番号）
+INPUT_LABELS = {"1": "入力1", "6": "入力2", "11": "入力3", "2": "入力4"}
 
 # dataviz の参照パレット（ライト）。categorical は固定順で使う
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a"]
@@ -291,7 +293,7 @@ def table_waveform(out: Path, rows_in: list[dict], name: str, ref_note: str) -> 
     # md: 指標ごとに 条件 × 入力 の行列
     lines = [f"基準: {ref_note}。値は定常時 5 回の中央値（5 回で値が違う場合は [最小〜最大]）。", ""]
     for m, label in metrics:
-        lines += [f"### {label}", "", "| 条件 | " + " | ".join(f"入力{i}" for i in INPUTS) + " |",
+        lines += [f"### {label}", "", "| 条件 | " + " | ".join(INPUT_LABELS[i] for i in INPUTS) + " |",
                   "|---|" + "---|" * len(INPUTS)]
         for p, cu in CONDITIONS:
             cells = [fmt_s(table.get((p, cu, i, m), summarize([])), 4, False) for i in INPUTS]
@@ -427,7 +429,7 @@ def fig_heatmap(out: Path, table: dict, metric: str, title: str, fname: str, fmt
         dark = not np.isnan(v) and v > vmax * 0.55
         ax.text(x, y, txt, ha="center", va="center", fontsize=8, color="white" if dark else TEXT)
     ax.set_xticks(range(len(INPUTS)))
-    ax.set_xticklabels([f"入力{i}" for i in INPUTS], fontsize=8)
+    ax.set_xticklabels([INPUT_LABELS[i] for i in INPUTS], fontsize=8)
     ax.set_yticks(range(len(CONDITIONS)))
     ax.set_yticklabels([cond_label(p, cu) for p, cu in CONDITIONS], fontsize=8)
     for i in (2.5, 5.5, 8.5):
