@@ -442,6 +442,66 @@ def fig_heatmap(out: Path, table: dict, metric: str, title: str, fname: str, fmt
     plt.close(fig)
 
 
+# 入力は 4 本あり、色で分けると色数の上限（3）を超えるので、1 色にして形で区別する
+INPUT_MARKERS = ["o", "s", "^", "D"]
+
+
+def _input_dots(ax, table: dict, metric: str, scale: float = 1.0) -> None:
+    """条件を縦に並べ、4 入力の中央値を点で打つ（値は書き込まない）"""
+    ys = np.arange(len(CONDITIONS))
+    # 振幅の増大が観測された 4 条件（Float16・Int8 × cpuAndNE・all）の行に背景の帯を敷き、目盛りの文字も強調する
+    for y, (p, cu) in zip(ys, CONDITIONS):
+        if p != "Float32" and cu in ("cpuAndNE", "all"):
+            ax.axhspan(y - 0.45, y + 0.45, color=SERIES[1], alpha=0.10, lw=0, zorder=0)
+    for k, (inp, marker) in enumerate(zip(INPUTS, INPUT_MARKERS)):
+        xs = [table.get((p, cu, inp, metric), summarize([]))["median"] * scale for p, cu in CONDITIONS]
+        ax.scatter(xs, ys + (k - 1.5) * 0.14, marker=marker, s=22, facecolor="none", edgecolor=SERIES[0],
+                   linewidth=1.2, label=INPUT_LABELS[inp], zorder=3)
+    ax.set_yticks(ys)
+    ax.set_yticklabels([cond_label(p, cu) for p, cu in CONDITIONS], fontsize=8)
+    for tick, (p, cu) in zip(ax.get_yticklabels(), CONDITIONS):
+        if p != "Float32" and cu in ("cpuAndNE", "all"):
+            tick.set_color(SERIES[1])
+            tick.set_fontweight("bold")
+    ax.set_ylim(len(CONDITIONS) - 0.5, -0.5)
+    for i in (2.5, 5.5, 8.5):
+        ax.axhline(i, color=GRID, lw=1, zorder=0)
+    ax.grid(axis="x", color=GRID, lw=0.8)
+    ax.set_axisbelow(True)
+
+
+def fig_rms_ratio(out: Path, wave: dict, voc: dict) -> None:
+    """合成の全体（基準 Float32 × cpuOnly）と HiFi-GAN だけの比較（基準 PyTorch）の RMS比を左右に並べる"""
+    panels = [(wave, "合成の全体（基準：Float32 × cpuOnly）"), (voc, "HiFi-GANのみ（基準：PyTorch版）")]
+    panels = [(t, label) for t, label in panels if t]
+    fig, axes = plt.subplots(1, len(panels), figsize=(4.6 * len(panels) + 1.4, 4.6), sharey=True, sharex=True,
+                             squeeze=False)
+    for ax, (table, label) in zip(axes[0], panels):
+        _input_dots(ax, table, "hifigan_rms_ratio")
+        ax.axvline(1.0, color=TEXT2, lw=1, ls="--", zorder=1)
+        ax.set_xlim(0, 4.8)
+        ax.set_xlabel("HiFi-GANの出力のRMS比", fontsize=9)
+        ax.set_title(label, fontsize=9, loc="left", color=TEXT2)
+    # 凡例は点と重ならないよう図の上に置く
+    fig.legend(*axes[0][0].get_legend_handles_labels(), frameon=False, fontsize=8, ncol=len(INPUTS),
+               loc="upper center", bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.savefig(out / "4-2-3-4_rms_ratio_dots.png")
+    plt.close(fig)
+
+
+def fig_over1_dots(out: Path, wave: dict) -> None:
+    fig, ax = plt.subplots(figsize=(6.0, 4.6))
+    _input_dots(ax, wave, "deemph_over1_ratio", scale=100)
+    ax.set_xlim(left=-0.6)
+    ax.set_xlabel("範囲の超過率 [%]（デエンファシス後）", fontsize=9)
+    fig.legend(*ax.get_legend_handles_labels(), frameon=False, fontsize=8, ncol=len(INPUTS),
+               loc="upper center", bbox_to_anchor=(0.5, 1.0))
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.savefig(out / "4-2-3-4_over1_ratio_dots.png")
+    plt.close(fig)
+
+
 def fig_e2e(out: Path, s: dict) -> None:
     keys = [(p, cu) for p, cu in CONDITIONS if (p, cu, INPUTS[0]) in s]
     if not keys:
@@ -505,12 +565,16 @@ def main() -> int:
         fig_heatmap(figures, wave, "decoder_mel_cosine", "Decoder 出力メルのコサイン類似度",
                     "4-2-3-4_decoder_mel_cosine.png", 4)
         fig_e2e(figures, table_e2e(tables, infer))
+        fig_over1_dots(figures, wave)
+    voc = {}
     if vocoder:
         voc = table_waveform(tables, vocoder, "4-2-3-4_vocoder", "同じメルを入れた PyTorch 版 HiFi-GAN の出力")
         fig_heatmap(figures, voc, "hifigan_rms_ratio", "HiFi-GAN だけの比較：RMS比（基準 PyTorch）",
                     "4-2-3-4_vocoder_rms_ratio.png", 3)
         fig_heatmap(figures, voc, "deemph_over1_ratio", "HiFi-GAN だけの比較：範囲の超過率 |x|>1",
                     "4-2-3-4_vocoder_over1_ratio.png", 3, percent=True)
+    if infer or vocoder:
+        fig_rms_ratio(figures, wave if infer else {}, voc)
     if device.is_dir():
         table_compute_plan(tables, device)
     print(f"# tables → {tables}")
