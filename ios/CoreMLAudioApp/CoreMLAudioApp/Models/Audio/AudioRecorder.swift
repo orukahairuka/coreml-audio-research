@@ -3,8 +3,12 @@ import AVFoundation
 /// マイクからの音声録音を管理する
 final class AudioRecorder: NSObject, AVAudioRecorderDelegate {
 
-    /// 録音の最大時間（秒）。CoreML モデルの入力上限 1000 フレーム ≒ 11.6 秒に対応
-    static let maxDuration: TimeInterval = 11.0
+    /// 録音の最大時間（秒）。本番モデルは入力を 262 フレーム固定（fixed262）で処理し、
+    /// 262 フレーム = 262 × hopLength(256) / sampleRate(22050) ≒ 3.04 秒。
+    /// これを超えて録音しても先頭 262 フレームだけが使われ残りは黙って切り捨てられるため、
+    /// 上限を実際に使われる長さに揃える。3.0 秒に収めることで録音全体が必ずモデルに渡る
+    /// （わずかに 262 フレーム未満となり末尾は無音パディングされるが、切り捨ては起きない）。
+    static let maxDuration: TimeInterval = 3.0
 
     private var recorder: AVAudioRecorder?
     private var timer: Timer?
