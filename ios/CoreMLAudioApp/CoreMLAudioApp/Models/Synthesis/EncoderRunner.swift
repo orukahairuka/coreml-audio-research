@@ -18,8 +18,11 @@ final class EncoderRunner {
     ///   - mel: 入力メル [T × nMels] を行優先で並べた配列
     ///   - frameCount: T (時間方向のフレーム数)
     ///   - nMels: メルビン数 (256)
-    /// - Returns: Encoder 出力の memory と、`predict()` の所要時間 (ms)
-    func run(mel: [Float], frameCount: Int, nMels: Int) async throws -> (memory: MLMultiArray, predictMs: Double) {
+    ///   - profiler: 処理別計測（卒論第4章の追加計測用）。nil なら計測しない
+    /// - Returns: Encoder 出力の memory、`predict()` の所要時間 (ms)、入力メルに含まれた NaN/Inf の個数
+    func run(mel: [Float], frameCount: Int, nMels: Int, profiler: StageProfiler? = nil) async throws -> (
+        memory: MLMultiArray, predictMs: Double, inputNonFiniteCount: Int
+    ) {
         let inputT: Int
         let contentT: Int
         switch policy {
@@ -43,33 +46,39 @@ final class EncoderRunner {
         for i in 0..<(contentT * nMels) {
             melArray[i] = NSNumber(value: mel[i])
         }
+        profiler?.lap(ProfileStage.encInputFill)
         let nonFiniteCount = try ModelInputArray.validateFloat32(
             melArray, paddingRanges: [(contentT * nMels)..<(inputT * nMels)], name: "Encoder mel"
         )
         if nonFiniteCount > 0 {
             print("[EncoderRunner] WARN: input mel contains \(nonFiniteCount) NaN/Inf values")
         }
+        profiler?.lap(ProfileStage.encInputValidate)
 
         // 入力 pos: [1, T] に 1, 2, ..., T を詰める（位置エンコーディング用）
         let posArray = try MLMultiArray(shape: [1, inputT as NSNumber], dataType: .int32)
         for i in 0..<inputT {
             posArray[i] = NSNumber(value: Int32(i + 1))
         }
+        profiler?.lap(ProfileStage.encPosFill)
 
         // CoreML の入力辞書を作って predict (時間計測は predict 呼び出しのみ)
         let input = try MLDictionaryFeatureProvider(dictionary: [
             "mel": MLFeatureValue(multiArray: melArray),
             "pos": MLFeatureValue(multiArray: posArray)
         ])
+        profiler?.lap(ProfileStage.encFeatureProvider)
         let t0 = CFAbsoluteTimeGetCurrent()
         let output = try await model.prediction(from: input)
         let predictMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+        profiler?.lap(ProfileStage.encPredict)
 
         // 出力から memory を取り出す（出力キーは 1 つだけの前提）
         guard let memoryFeature = output.featureValue(for: output.featureNames.first ?? ""),
               let memory = memoryFeature.multiArrayValue else {
             throw AudioSynthesizer.SynthesisError.decoderFailed
         }
-        return (memory, predictMs)
+        profiler?.lap(ProfileStage.encOutputExtract)
+        return (memory, predictMs, nonFiniteCount)
     }
 }

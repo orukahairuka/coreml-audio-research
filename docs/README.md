@@ -43,6 +43,8 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-06-21 | [ane-stage-isolation-breakdown](2026-06-21/ane-stage-isolation-breakdown.md) | ANE破綻が encoder/decoder/mel/HiFi-GAN/最終wave のどこで起きるかを境界横断で切り分け。実機 良(f16GPU) vs 壊れ run（mel_normalized が sha256 一致＝混入なし）で、mel/encoder/postnet は cosine≈1.0、**HiFi-GAN 出力波形だけ rms が約4.25倍に膨張して clipping**＝破綻はHiFi-GAN×NE段に限局。同一postnetを入れたHiFi-GAN単体実験(Mac)でもcpuAndNEだけ4.36倍で実機4.24倍と一致。iOS mel フロントエンドが librosa と非一致(262 vs 266, cos 0.92)も発見 |
 | 2026-06-21 | [ios-feasibility-evaluation-report](2026-06-21/ios-feasibility-evaluation-report.md) | 3軸（①速い ②壊れない ③使える音）を1本に統合した実機評価レポート。12条件の成立マップ、各軸の結果、破綻箇所の切り分け、考察・結論・今後の課題まで。F16/Int8×{cpuAndNE,all}の4条件が3軸すべてで不成立、成立候補はCPU/GPU系に絞られる |
 | 2026-06-25 | [coreai-device-inference-design](2026-06-25/coreai-device-inference-design.md) | Phase 2 設計メモ。CoreML後継 Core AI に変換した `.aimodel` を iPhone(3)@27.0 で cpu/gpu/neuralEngine 比較する実機推論パスの設計。.aimodel一覧、追加ファイル、流用すべきCoreML既存実装、Core AIのload/compile/run、compute unit切替（SpecializationOptions.preferredComputeUnitKind）、最小構成はHiFi-GAN単体推奨、速度/PSNR/MCD/clipping記録方針。fp16はexport時でなく実行時compute unitで決まる点が鍵 |
+| 2026-10-22 | [thesis-ch4-benchmark-report](2026-10-22/thesis-ch4-benchmark-report.md) | 卒論第4章の計測の報告。UI を使わない計測モードと PC 側の起動・集計スクリプトを実装し、iPhone 13（iOS 27.2.0）と iPhone 17 Pro（iOS 27.0.0）で 12 条件 × 4 入力を計測。振幅の異常は F16/Int8×{cpuAndNE,all} の4条件の HiFi-GAN 段だけで両端末同値、WAV 保存はクリップ、起動し直しただけの初回の読み込みは数 ms、E2E の約2/3はモデル呼び出し以外、iOS の T は PyTorch より4フレーム少ない。本文 4-1 節で直す点の一覧つき |
+| 2026-10-22 | [thesis-ch4-handoff](2026-10-22/thesis-ch4-handoff.md) | 卒論第4章の計測を別セッションで引き継ぐためのメモ。状態と残り、ファイルの場所、計測の回し方、ハマりどころ（iOS 27 シミュで XCTest が止まる、署名の信頼、起動し直しでは初回にならない等）、ユーザーとの約束ごと |
 
 ## トピック別
 
@@ -93,6 +95,8 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [load-timing-results](2026-06-10/load-timing-results.md)
 - [audio-quality-mcd-results](2026-06-21/audio-quality-mcd-results.md)
 - [ios-feasibility-evaluation-report](2026-06-21/ios-feasibility-evaluation-report.md)
+- [thesis-ch4-benchmark-report](2026-10-22/thesis-ch4-benchmark-report.md)
+- [thesis-ch4-handoff](2026-10-22/thesis-ch4-handoff.md)
 
 ### ブランチ・PR まとめ
 

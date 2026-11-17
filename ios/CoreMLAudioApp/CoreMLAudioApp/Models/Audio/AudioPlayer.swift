@@ -49,25 +49,7 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         try AVAudioSession.sharedInstance().setActive(true)
         #endif
 
-        guard let format = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: sampleRate,
-            channels: 1,
-            interleaved: false
-        ) else {
-            throw PlaybackError.formatCreationFailed
-        }
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(waveform.count)) else {
-            throw PlaybackError.bufferCreationFailed
-        }
-        buffer.frameLength = AVAudioFrameCount(waveform.count)
-
-        guard let channelData = buffer.floatChannelData?[0] else {
-            throw PlaybackError.bufferCreationFailed
-        }
-        for i in 0..<waveform.count {
-            channelData[i] = waveform[i]
-        }
+        let buffer = try WavWriter.makeBuffer(waveform: waveform, sampleRate: sampleRate)
 
         // WAV ファイルとして Result/ に書き出す (Int16 PCM)
         let resultDir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -85,24 +67,7 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         }
         let outputURL = resultDir.appendingPathComponent(fileName)
 
-        let wavSettings: [String: Any] = [
-            AVFormatIDKey: Int(kAudioFormatLinearPCM),
-            AVSampleRateKey: sampleRate,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 16,
-            AVLinearPCMIsFloatKey: false,
-            AVLinearPCMIsBigEndianKey: false,
-        ]
-        // do スコープで outputFile を閉じてから AVAudioPlayer で読み込む
-        do {
-            let outputFile = try AVAudioFile(
-                forWriting: outputURL,
-                settings: wavSettings,
-                commonFormat: .pcmFormatFloat32,
-                interleaved: false
-            )
-            try outputFile.write(from: buffer)
-        }
+        try WavWriter.writeInt16(buffer: buffer, to: outputURL)
 
         let newPlayer = try AVAudioPlayer(contentsOf: outputURL)
         newPlayer.delegate = self
@@ -124,14 +89,10 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     enum PlaybackError: LocalizedError {
-        case formatCreationFailed
-        case bufferCreationFailed
         case playbackStartFailed
 
         var errorDescription: String? {
             switch self {
-            case .formatCreationFailed: return "オーディオフォーマットの作成に失敗しました。"
-            case .bufferCreationFailed: return "オーディオバッファの作成に失敗しました。"
             case .playbackStartFailed: return "再生を開始できませんでした。"
             }
         }

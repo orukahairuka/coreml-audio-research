@@ -70,6 +70,15 @@ struct CoreAINumericsTests {
     }
 
     @Test
+    func statsCountsAbsOverOneSeparatelyFrom099() {
+        // 0.995 は 0.99 判定には入るが |x| > 1 には入らない。±1.0 ちょうども超過ではない
+        let stats = WaveformStatistics(waveform: [0.995, 1.0, -1.0, 1.5, -2.0, .nan, .infinity, 0])
+        #expect(stats.over1Count == 2)
+        #expect(abs(stats.ratioAbsOver1 - 2.0 / 8.0) < 1e-9)
+        #expect(abs(stats.ratioOver099 - 3.0 / 8.0) < 1e-9)
+    }
+
+    @Test
     func statsAllNonFiniteYieldsNaNAggregates() {
         let stats = WaveformStatistics(waveform: [.nan, .infinity])
         #expect(stats.finiteCount == 0)

@@ -11,7 +11,12 @@ import SwiftUI
 struct CoreMLAudioAppApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            // 起動時の環境変数 CMLA_THESIS_BENCH があれば、UI を使わない計測モードで起動する
+            if ThesisBenchConfig.isRequested {
+                ThesisBenchView()
+            } else {
+                ContentView()
+            }
         }
     }
 }

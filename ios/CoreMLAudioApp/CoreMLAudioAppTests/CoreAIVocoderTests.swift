@@ -22,7 +22,6 @@ import CoreAI
 ///
 /// 出力: `Documents/Result/coreai/hifigan_compute_units.csv` と各波形の .npy。
 #if canImport(CoreAI)
-@available(iOS 27.0, macOS 27.0, *)
 struct CoreAIVocoderTests {
 
     private static let modelBaseName = "HiFiGAN_Generator_float32_f262"
