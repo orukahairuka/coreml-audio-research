@@ -17,6 +17,9 @@ import Foundation
 /// | `CMLA_THESIS_WARMUP` | infer / vocoder：入力ごとのウォームアップ回数（既定 1） |
 /// | `CMLA_THESIS_STEADY` | infer / vocoder：入力ごとの定常時の回数（既定 5） |
 /// | `CMLA_THESIS_INPUTS` | infer / vocoder：入力の名前をカンマ区切りで（既定は thesis_inputs.json の順） |
+/// | `CMLA_THESIS_CU_HIFI` | 省略可。HiFi-GAN だけ別の Compute Units で読み込む（Encoder・Decoder は `CMLA_THESIS_CU`）。|
+/// |  | 省略時と `CMLA_THESIS_CU` と同じ値のときは、従来の 3 モデル同一の条件になる |
+/// | `CMLA_THESIS_PROFILE` | 省略可。`1` で infer の End-to-End を処理別に計測し `infer_stages.csv` に出す |
 struct ThesisBenchConfig {
 
     enum Mode: String {
@@ -46,6 +49,13 @@ struct ThesisBenchConfig {
     let warmupCount: Int
     let steadyCount: Int
     let inputNames: [String]?
+    /// HiFi-GAN だけに使う Compute Units（nil なら `computeUnit` と同じ）
+    let hifiganComputeUnitOverride: ComputeUnitOption?
+    /// infer で処理別の時間を計測するか
+    let profileEnabled: Bool
+
+    /// 計測コードの版。CSV の `bench_version` 列に出し、追加計測より前の結果（列が無い）と区別する
+    static let benchVersion = "ch4-v2"
 
     /// 計測モードで起動されたか
     static var isRequested: Bool {
@@ -71,6 +81,18 @@ struct ThesisBenchConfig {
             if computeUnit == nil { throw ConfigError.missing("CMLA_THESIS_CU") }
         }
 
+        var hifiganComputeUnit: ComputeUnitOption?
+        if let raw = env["CMLA_THESIS_CU_HIFI"], !raw.isEmpty {
+            guard let cu = ComputeUnitOption(rawValue: raw) else { throw ConfigError.invalid("CMLA_THESIS_CU_HIFI", raw) }
+            // CMLA_THESIS_CU と同じ値なら従来の条件と同じなので、指定が無いのと同じに扱う
+            hifiganComputeUnit = cu == computeUnit ? nil : cu
+        }
+        var profileEnabled = false
+        if let raw = env["CMLA_THESIS_PROFILE"] {
+            guard raw == "0" || raw == "1" else { throw ConfigError.invalid("CMLA_THESIS_PROFILE", raw) }
+            profileEnabled = raw == "1"
+        }
+
         func intValue(_ key: String, default value: Int) throws -> Int {
             guard let raw = env[key] else { return value }
             guard let v = Int(raw), v >= 0 else { throw ConfigError.invalid(key, raw) }
@@ -88,7 +110,9 @@ struct ThesisBenchConfig {
             steadyCount: try intValue("CMLA_THESIS_STEADY", default: 5),
             inputNames: env["CMLA_THESIS_INPUTS"].map({ raw in
                 raw.split(separator: ",").map({ String($0) })
-            })
+            }),
+            hifiganComputeUnitOverride: hifiganComputeUnit,
+            profileEnabled: profileEnabled
         )
     }
 
@@ -100,8 +124,24 @@ struct ThesisBenchConfig {
             .appendingPathComponent(sessionID, isDirectory: true)
     }
 
-    /// CSV や npy のファイル名に使う条件のラベル（例: `Float16_cpuAndNE`）
+    /// HiFi-GAN の読み込みに使う Compute Units
+    var hifiganComputeUnit: ComputeUnitOption? {
+        hifiganComputeUnitOverride ?? computeUnit
+    }
+
+    /// モデルごとに Compute Units を分けた条件か
+    var isMixedComputeUnits: Bool { hifiganComputeUnitOverride != nil }
+
+    /// CSV の `compute_units` 列の値。従来の条件はそのまま（例: `cpuAndNE`）、
+    /// HiFi-GAN だけ分けた条件は `cpuAndNE+hifi-cpuOnly` のようにして、従来の条件の行と混ざらないようにする
+    var computeUnitsLabel: String {
+        let base = computeUnit?.rawValue ?? ""
+        guard let hifi = hifiganComputeUnitOverride else { return base }
+        return "\(base)+hifi-\(hifi.rawValue)"
+    }
+
+    /// CSV や npy のファイル名に使う条件のラベル（例: `Float16_cpuAndNE`、`Float16_cpuAndNE+hifi-cpuOnly`）
     var conditionLabel: String {
-        "\(precision?.rawValue ?? "-")_\(computeUnit?.rawValue ?? "-")"
+        "\(precision?.rawValue ?? "-")_\(computeUnit == nil ? "-" : computeUnitsLabel)"
     }
 }

@@ -31,6 +31,8 @@ final class ThesisPipeline {
         /// デエンファシス後の波形（保存前）
         let deemphWaveform: [Float]
         let e2eMs: Double
+        /// 処理別計測（`CMLA_THESIS_PROFILE=1` のときだけ。区間の合計は e2eMs と一致する）
+        let profile: StageProfiler?
 
         var synthMs: Double { encoderMs + decoderTotalMs + hifiganMs }
     }
@@ -136,23 +138,30 @@ final class ThesisPipeline {
 
     // MARK: - 合成
 
-    func synthesize(inputURL: URL) async throws -> Measurement {
+    /// - Parameter profiler: 処理別計測。渡すと End-to-End の区間を処理ごとに切り分ける。
+    ///   起点と終点は End-to-End 時間と同じ時刻にそろえるので、区間の合計は e2eMs と一致する
+    func synthesize(inputURL: URL, profiler: StageProfiler? = nil) async throws -> Measurement {
         let nMels = Self.nMels
         let tStart = CFAbsoluteTimeGetCurrent()
+        profiler?.start(at: tStart)
 
         // 1. 前処理（読み込み・リサンプリング・メル抽出）
         let samples = try AudioFeatureExtractor.loadAudio(from: inputURL)
+        profiler?.lap(ProfileStage.audioLoad)
         let (mel, totalFrames) = AudioFeatureExtractor.extractMelSpectrogram(fromSamples: samples)
         let effectiveFrames: Int
         switch transformerPolicy {
         case .fixed(let targetT): effectiveFrames = min(totalFrames, targetT)
         case .dynamic(let maxT): effectiveFrames = min(totalFrames, maxT)
         }
-        let preprocessMs = (CFAbsoluteTimeGetCurrent() - tStart) * 1000
+        let tPreprocessEnd = profiler?.lap(ProfileStage.melExtract) ?? CFAbsoluteTimeGetCurrent()
+        let preprocessMs = (tPreprocessEnd - tStart) * 1000
 
         // 2. Encoder
         let encoderRunner = EncoderRunner(model: encoder, policy: transformerPolicy)
-        let encoderResult = try await encoderRunner.run(mel: mel, frameCount: effectiveFrames, nMels: nMels)
+        let encoderResult = try await encoderRunner.run(
+            mel: mel, frameCount: effectiveFrames, nMels: nMels, profiler: profiler
+        )
 
         // 3. Decoder
         let decoderRunner = DecoderRunner(model: decoder, policy: transformerPolicy)
@@ -160,19 +169,20 @@ final class ThesisPipeline {
             memory: encoderResult.memory,
             frameCount: effectiveFrames,
             nMels: nMels,
-            onStep: { _ in }
+            onStep: { _ in },
+            profiler: profiler
         )
 
         // 4. HiFi-GAN
         let vocoderRunner = VocoderRunner(model: hifigan, policy: vocoderPolicy)
         let vocoderResult = try await vocoderRunner.run(
-            postnetOut: decoderResult.postnetOut, totalFrames: effectiveFrames, nMels: nMels
+            postnetOut: decoderResult.postnetOut, totalFrames: effectiveFrames, nMels: nMels, profiler: profiler
         )
 
         // 5. デエンファシス
         let tDeemph = CFAbsoluteTimeGetCurrent()
         let deemph = AudioFeatureExtractor.applyDeemphasis(vocoderResult.waveform)
-        let tEnd = CFAbsoluteTimeGetCurrent()
+        let tEnd = profiler?.lap(ProfileStage.deemph) ?? CFAbsoluteTimeGetCurrent()
 
         return Measurement(
             totalFrames: totalFrames,
@@ -190,7 +200,8 @@ final class ThesisPipeline {
             hifiganWaveform: vocoderResult.waveform,
             deemphMs: (tEnd - tDeemph) * 1000,
             deemphWaveform: deemph,
-            e2eMs: (tEnd - tStart) * 1000
+            e2eMs: (tEnd - tStart) * 1000,
+            profile: profiler
         )
     }
 

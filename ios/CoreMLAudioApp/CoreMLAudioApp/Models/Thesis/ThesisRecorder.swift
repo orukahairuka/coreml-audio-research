@@ -110,8 +110,12 @@ final class ThesisRecorder {
             "os_version": Self.osVersion,
             "os_version_string": Self.osVersionString,
             "precision": config.precision?.rawValue ?? "",
-            "compute_units": config.computeUnit?.rawValue ?? "",
+            "compute_units": config.computeUnit == nil ? "" : config.computeUnitsLabel,
             "shape_mode": ThesisBenchConfig.shapeMode.rawValue,
+            "encdec_compute_units": config.computeUnit?.rawValue ?? "",
+            "hifigan_compute_units": config.hifiganComputeUnit?.rawValue ?? "",
+            "bench_version": ThesisBenchConfig.benchVersion,
+            "profile_enabled": config.profileEnabled ? "1" : "0",
         ]
     }
 
@@ -119,6 +123,9 @@ final class ThesisRecorder {
         "session_id", "launch_id", "mode", "device_model", "os_version", "os_version_string",
         "precision", "compute_units", "shape_mode",
     ]
+
+    /// 追加計測（ch4-v2）で足した列。既存の列の並びを変えないよう、各 CSV の末尾に付ける
+    static let versionHeader = ["encdec_compute_units", "hifigan_compute_units", "bench_version", "profile_enabled"]
 
     // MARK: - crumb
 

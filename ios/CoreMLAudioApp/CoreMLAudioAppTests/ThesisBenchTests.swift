@@ -28,6 +28,55 @@ struct ThesisBenchTests {
         #expect(config.sessionDirectory.path.hasSuffix("Result/thesis/s1"))
     }
 
+    @Test func configWithoutNewVariablesKeepsLegacyCondition() throws {
+        let config = try ThesisBenchConfig.fromEnvironment([
+            "CMLA_THESIS_BENCH": "infer", "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuAndNE",
+        ])
+        #expect(config.isMixedComputeUnits == false)
+        #expect(config.hifiganComputeUnit == .cpuAndNE)
+        #expect(config.computeUnitsLabel == "cpuAndNE")
+        #expect(config.conditionLabel == "Float16_cpuAndNE")
+        #expect(config.profileEnabled == false)
+    }
+
+    @Test func configParsesMixedComputeUnits() throws {
+        let config = try ThesisBenchConfig.fromEnvironment([
+            "CMLA_THESIS_BENCH": "infer", "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuAndNE",
+            "CMLA_THESIS_CU_HIFI": "cpuOnly", "CMLA_THESIS_PROFILE": "1",
+        ])
+        #expect(config.isMixedComputeUnits)
+        #expect(config.computeUnit == .cpuAndNE)
+        #expect(config.hifiganComputeUnit == .cpuOnly)
+        #expect(config.computeUnitsLabel == "cpuAndNE+hifi-cpuOnly")
+        #expect(config.conditionLabel == "Float16_cpuAndNE+hifi-cpuOnly")
+        #expect(config.profileEnabled)
+    }
+
+    @Test func configTreatsSameHifiganUnitAsLegacy() throws {
+        // 条件 A（3 モデルとも cpuAndNE）を明示しても、従来の Float16_cpuAndNE と同じ行になる
+        let config = try ThesisBenchConfig.fromEnvironment([
+            "CMLA_THESIS_BENCH": "infer", "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuAndNE",
+            "CMLA_THESIS_CU_HIFI": "cpuAndNE",
+        ])
+        #expect(config.isMixedComputeUnits == false)
+        #expect(config.conditionLabel == "Float16_cpuAndNE")
+    }
+
+    @Test func configRejectsUnknownNewValues() {
+        #expect(throws: ThesisBenchConfig.ConfigError.self) {
+            _ = try ThesisBenchConfig.fromEnvironment([
+                "CMLA_THESIS_BENCH": "infer", "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuAndNE",
+                "CMLA_THESIS_CU_HIFI": "gpu",
+            ])
+        }
+        #expect(throws: ThesisBenchConfig.ConfigError.self) {
+            _ = try ThesisBenchConfig.fromEnvironment([
+                "CMLA_THESIS_BENCH": "infer", "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuAndNE",
+                "CMLA_THESIS_PROFILE": "yes",
+            ])
+        }
+    }
+
     // MARK: - StageProfiler
 
     @Test func profilerLapsPartitionTheSpan() {
@@ -41,6 +90,21 @@ struct ThesisBenchTests {
         #expect(profiler.counts[ProfileStage.decInputFill] == 3)
         #expect(profiler.counts[ProfileStage.deemph] == 1)
         #expect(abs(profiler.sumMs - profiler.spanMs) < 1e-6)
+    }
+
+    @Test func stagesHeaderHasEveryStageOnce() {
+        let header = ThesisBenchRunner.stagesHeader
+        #expect(Set(header).count == header.count)
+        for stage in ProfileStage.all {
+            #expect(header.contains("\(stage)_ms"))
+        }
+    }
+
+    @Test func runHeaderKeepsLegacyColumnsFirst() {
+        // 追加した列は末尾だけ。既存の列の並びは変えない
+        let legacyTail = Array(ThesisBenchRunner.runHeader.prefix(ThesisBenchRunner.runHeader.count - ThesisRecorder.versionHeader.count))
+        #expect(legacyTail.last == "file_prefix")
+        #expect(Array(ThesisBenchRunner.runHeader.suffix(ThesisRecorder.versionHeader.count)) == ThesisRecorder.versionHeader)
     }
 
     @Test func configRequiresConditionExceptThermal() throws {

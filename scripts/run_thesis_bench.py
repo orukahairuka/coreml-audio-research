@@ -21,6 +21,9 @@ load は条件ごとに「インストールし直してから起動」を 3 回
       --conditions Float32:cpuOnly --inputs 1
   # 本番（iPhone 13）
   scripts/run_thesis_bench.py --device "iPhone (3)" --install path/to/CoreMLAudioApp.app
+  # 混合 Compute Units（精度:Encoder・Decoder の CU:HiFi-GAN の CU）＋処理別計測
+  scripts/run_thesis_bench.py --device "iPhone (3)" --phases load,infer --profile \\
+      --conditions Float16:cpuAndNE,Float16:cpuAndNE:cpuAndGPU,Float16:cpuAndNE:cpuOnly,Float16:cpuOnly
   # シミュレータでスクリプトの動作確認
   scripts/run_thesis_bench.py --simulator <UDID> --phases infer --conditions Float32:cpuOnly --inputs 1
 """
@@ -46,7 +49,15 @@ BUNDLE_ID = "erika.com.CoreMLAudioApp"
 PRECISIONS = ["Float32", "Float16", "Int8"]
 # ANE を使う条件（cpuAndNE, all）を後に回す
 COMPUTE_UNITS = ["cpuOnly", "cpuAndGPU", "cpuAndNE", "all"]
-ALL_CONDITIONS = [(p, cu) for cu in COMPUTE_UNITS for p in PRECISIONS]
+ALL_CONDITIONS = [(p, cu, None) for cu in COMPUTE_UNITS for p in PRECISIONS]
+
+# 追加計測（混合 Compute Units・処理別計測）に対応した版。アプリ側の ThesisBenchConfig.benchVersion と同じ
+BENCH_VERSION = "ch4-v2"
+
+
+def cu_label(cu: str, hifi_cu: str | None) -> str:
+    """CSV の compute_units 列の値（アプリ側の computeUnitsLabel と同じ）"""
+    return cu if not hifi_cu or hifi_cu == cu else f"{cu}+hifi-{hifi_cu}"
 
 DEFAULT_TIMEOUT = {"load": 600, "plan": 600, "infer": 1800, "vocoder": 900, "thermal": 120}
 
@@ -54,6 +65,7 @@ HOST_HEADER = [
     "session_id", "launch_id", "mode", "precision", "compute_units", "launch_index",
     "load_kind", "after_install", "thermal_wait_sec", "thermal_at_start", "started_at", "ended_at",
     "elapsed_sec", "status", "exit_code", "crumb", "log_path",
+    "encdec_compute_units", "hifigan_compute_units", "bench_version", "profile_enabled",
 ]
 THERMAL_HEADER = ["session_id", "checked_at", "before_launch_id", "state", "status"]
 
@@ -238,8 +250,8 @@ class Bench:
             files = list(Path(tmp).rglob("crumb_*.txt"))
             return files[0].read_text().strip() if files else ""
 
-    def run_one(self, mode: str, precision: str, cu: str, launch_index: int, wait_thermal: bool,
-                load_kind: str = "") -> None:
+    def run_one(self, mode: str, precision: str, cu: str, hifi_cu: str | None, launch_index: int,
+                wait_thermal: bool, load_kind: str = "") -> None:
         launch_id = self.next_launch_id(mode)
         thermal_wait, thermal_state = (0.0, "")
         if wait_thermal:
@@ -257,19 +269,26 @@ class Bench:
         }
         if self.args.inputs:
             env["CMLA_THESIS_INPUTS"] = self.args.inputs
-        print(f"[{now_iso()}] {launch_id} {mode} {precision}:{cu} #{launch_index} (thermal wait {thermal_wait:.0f}s)")
+        if hifi_cu:
+            env["CMLA_THESIS_CU_HIFI"] = hifi_cu
+        if self.args.profile:
+            env["CMLA_THESIS_PROFILE"] = "1"
+        label = cu_label(cu, hifi_cu)
+        print(f"[{now_iso()}] {launch_id} {mode} {precision}:{label} #{launch_index} (thermal wait {thermal_wait:.0f}s)")
         started_at = now_iso()
         status, exit_code, _, elapsed = self.launch(env, launch_id, self.args.timeout.get(mode, 1800))
         crumb = "" if status == "ok" else self.fetch_crumb(launch_id)
         print(f"  → {status} ({elapsed:.1f}s){'  crumb: ' + crumb if crumb else ''}")
         append_csv(self.host_csv, HOST_HEADER, {
             "session_id": self.session, "launch_id": launch_id, "mode": mode,
-            "precision": precision, "compute_units": cu, "launch_index": launch_index,
+            "precision": precision, "compute_units": label, "launch_index": launch_index,
             "load_kind": load_kind, "after_install": int(self.after_install), "thermal_wait_sec": f"{thermal_wait:.1f}",
             "thermal_at_start": thermal_state, "started_at": started_at, "ended_at": now_iso(),
             "elapsed_sec": f"{elapsed:.1f}", "status": status,
             "exit_code": "" if exit_code is None else exit_code, "crumb": crumb,
             "log_path": f"logs/{launch_id}.log",
+            "encdec_compute_units": cu, "hifigan_compute_units": hifi_cu or cu,
+            "bench_version": BENCH_VERSION, "profile_enabled": int(self.args.profile),
         })
         self.after_install = False
 
@@ -282,7 +301,7 @@ class Bench:
             self.after_install = True
         for mode in self.args.phases:
             print(f"===== {mode} =====")
-            for precision, cu in self.args.conditions:
+            for precision, cu, hifi_cu in self.args.conditions:
                 if mode == "load":
                     # インストール直後の初回 × N（毎回入れ直す）→ 起動し直すだけの初回 × M
                     kinds = (["after_install"] * self.args.load_install_launches
@@ -291,22 +310,27 @@ class Bench:
                     kinds = [""]
                 for i, kind in enumerate(kinds, start=1):
                     # 条件が変わるときだけ thermal を待つ（同じ条件の load の起動し直しの間は待たない）
-                    self.run_one(mode, precision, cu, i, wait_thermal=(i == 1 and not self.args.no_thermal_wait),
-                                 load_kind=kind)
+                    self.run_one(mode, precision, cu, hifi_cu, i,
+                                 wait_thermal=(i == 1 and not self.args.no_thermal_wait), load_kind=kind)
         print("===== 結果を吸い出す =====")
         ok = self.target.copy_from_documents(f"Result/thesis/{self.session}", self.out_dir / "device")
         print("  → " + ("OK " + str(self.out_dir / "device") if ok else "失敗（手で copy from してください）"))
 
 
-def parse_conditions(text: str | None) -> list[tuple[str, str]]:
+def parse_conditions(text: str | None) -> list[tuple[str, str, str | None]]:
+    """`精度:CU` または `精度:CU:HiFi-GANのCU` のカンマ区切り。HiFi-GAN の CU が CU と同じなら従来の条件として扱う"""
     if not text:
         return ALL_CONDITIONS
     out = []
     for item in text.split(","):
-        p, cu = item.split(":")
-        if p not in PRECISIONS or cu not in COMPUTE_UNITS:
+        parts = item.split(":")
+        if len(parts) not in (2, 3):
             raise SystemExit(f"不明な条件: {item}")
-        out.append((p, cu))
+        p, cu = parts[0], parts[1]
+        hifi_cu = parts[2] if len(parts) == 3 else None
+        if p not in PRECISIONS or cu not in COMPUTE_UNITS or (hifi_cu is not None and hifi_cu not in COMPUTE_UNITS):
+            raise SystemExit(f"不明な条件: {item}")
+        out.append((p, cu, None if hifi_cu == cu else hifi_cu))
     return out
 
 
@@ -316,7 +340,10 @@ def main() -> int:
     target.add_argument("--device", help="devicectl の名前（例: 'iPhone (3)'）")
     target.add_argument("--simulator", help="シミュレータの UDID（スクリプトの動作確認用）")
     parser.add_argument("--phases", default="load,plan,infer,vocoder")
-    parser.add_argument("--conditions", help="Float32:cpuOnly,... 既定は 12 条件（ANE を使う条件が後）")
+    parser.add_argument("--conditions", help="Float32:cpuOnly,... 既定は 12 条件（ANE を使う条件が後）。"
+                        "Float16:cpuAndNE:cpuOnly のように 3 つ目を書くと HiFi-GAN だけその CU で読み込む")
+    parser.add_argument("--profile", action="store_true",
+                        help="infer で End-to-End を処理別に計測する（アプリが infer_stages.csv を出す）")
     parser.add_argument("--inputs", help="入力の名前をカンマ区切りで（既定はアプリの thesis_inputs.json の順）")
     parser.add_argument("--load-install-launches", type=int, default=3,
                         help="load で条件ごとに「インストールし直してから起動」する回数")

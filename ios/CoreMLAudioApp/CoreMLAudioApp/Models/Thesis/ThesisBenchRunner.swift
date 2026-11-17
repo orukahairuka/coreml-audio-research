@@ -16,6 +16,7 @@ final class ThesisBenchRunner {
     static let loadCsv = "load_runs.csv"
     static let inferCsv = "infer_runs.csv"
     static let vocoderCsv = "vocoder_runs.csv"
+    static let stagesCsv = "infer_stages.csv"
 
     private let config: ThesisBenchConfig
     private let recorder: ThesisRecorder
@@ -59,14 +60,17 @@ final class ThesisBenchRunner {
     }
 
     private var precision: ModelPrecision { config.precision ?? .float32 }
+    /// Encoder・Decoder の Compute Units
     private var computeUnit: ComputeUnitOption { config.computeUnit ?? .cpuOnly }
+    /// HiFi-GAN の Compute Units（`CMLA_THESIS_CU_HIFI` が無ければ `computeUnit` と同じ）
+    private var hifiganComputeUnit: ComputeUnitOption { config.hifiganComputeUnit ?? computeUnit }
 
     // MARK: - load
 
     static let loadHeader = ThesisRecorder.commonHeader + [
         "kind", "index", "status", "error", "thermal_before", "thermal_after", "started_at",
         "encoder_ms", "decoder_ms", "hifigan_ms", "total_ms",
-    ]
+    ] + ThesisRecorder.versionHeader
 
     private func runLoad() {
         let urls: ThesisPipeline.ModelURLs
@@ -87,7 +91,7 @@ final class ThesisBenchRunner {
                 do {
                     let enc = try ThesisPipeline.loadModel(at: urls.encoder, computeUnit: computeUnit)
                     let dec = try ThesisPipeline.loadModel(at: urls.decoder, computeUnit: computeUnit)
-                    let hifi = try ThesisPipeline.loadModel(at: urls.hifigan, computeUnit: computeUnit)
+                    let hifi = try ThesisPipeline.loadModel(at: urls.hifigan, computeUnit: hifiganComputeUnit)
                     return .success([enc.ms, dec.ms, hifi.ms])
                 } catch {
                     return .failure(error)
@@ -129,8 +133,9 @@ final class ThesisBenchRunner {
         let dir = recorder.directory
             .appendingPathComponent("compute_plan", isDirectory: true)
             .appendingPathComponent(config.conditionLabel, isDirectory: true)
-        let models: [(name: String, url: URL)] = [
-            ("encoder", urls.encoder), ("decoder", urls.decoder), ("hifigan", urls.hifigan),
+        let models: [(name: String, url: URL, computeUnit: ComputeUnitOption)] = [
+            ("encoder", urls.encoder, computeUnit), ("decoder", urls.decoder, computeUnit),
+            ("hifigan", urls.hifigan, hifiganComputeUnit),
         ]
         for model in models {
             recorder.writeCrumb("mode=plan model=\(model.name) condition=\(config.conditionLabel)")
@@ -138,7 +143,7 @@ final class ThesisBenchRunner {
                 modelURL: model.url,
                 modelName: model.url.deletingPathExtension().lastPathComponent,
                 precision: precision,
-                computeUnits: computeUnit,
+                computeUnits: model.computeUnit,
                 outputDirectory: dir
             )
             do {
@@ -165,7 +170,16 @@ final class ThesisBenchRunner {
         "deemph_min", "deemph_max", "deemph_rms", "deemph_nan", "deemph_inf",
         "deemph_over1_count", "deemph_over1_ratio", "deemph_over099_ratio",
         "file_prefix",
-    ]
+    ] + ThesisRecorder.versionHeader
+
+    /// 処理別計測（`CMLA_THESIS_PROFILE=1`）の行。infer_runs.csv とは launch_id・input_name・run_index で突き合わせる。
+    /// `<区間>_ms` は区間ごとの積算時間（Decoder の区間は全ステップの合計）。
+    /// 区間は End-to-End の起点から終点まで隙間なく並ぶので、`profile_sum_ms` は `e2e_ms` と一致する
+    /// （`profile_residual_ms` = e2e_ms − profile_sum_ms は浮動小数点の丸め程度のはず）
+    static let stagesHeader = ThesisRecorder.commonHeader + [
+        "input_name", "run_index", "phase", "status", "decoder_steps",
+        "e2e_ms", "profile_sum_ms", "profile_residual_ms", "predict_sum_ms", "non_predict_ms",
+    ] + ProfileStage.all.map({ "\($0)_ms" }) + ThesisRecorder.versionHeader
 
     /// 何回目の実行か（読み込み直後の 1 回目は initial）
     private func phase(isFirstAfterLoad: Bool, runIndex: Int) -> String {
@@ -197,7 +211,7 @@ final class ThesisBenchRunner {
         recorder.writeCrumb("mode=infer stage=load condition=\(config.conditionLabel)")
         let enc = try ThesisPipeline.loadModel(at: urls.encoder, computeUnit: computeUnit)
         let dec = try ThesisPipeline.loadModel(at: urls.decoder, computeUnit: computeUnit)
-        let hifi = try ThesisPipeline.loadModel(at: urls.hifigan, computeUnit: computeUnit)
+        let hifi = try ThesisPipeline.loadModel(at: urls.hifigan, computeUnit: hifiganComputeUnit)
         ThesisRecorder.log("[thesis] infer \(config.conditionLabel) loaded in "
             + Self.ms(enc.ms + dec.ms + hifi.ms) + " ms")
         let pipeline = ThesisPipeline(encoder: enc.model, decoder: dec.model, hifigan: hifi.model)
@@ -218,12 +232,18 @@ final class ThesisBenchRunner {
                 values["thermal_before"] = ThesisRecorder.thermalState
                 values["started_at"] = ThesisRecorder.timestamp()
                 do {
-                    let m = try await pipeline.synthesize(inputURL: try ThesisPipeline.inputURL(name: name))
+                    let profiler: StageProfiler? = config.profileEnabled ? StageProfiler() : nil
+                    let m = try await pipeline.synthesize(
+                        inputURL: try ThesisPipeline.inputURL(name: name), profiler: profiler
+                    )
                     values["thermal_after"] = ThesisRecorder.thermalState
                     values.merge(inferValues(m), uniquingKeysWith: { _, new in new })
                     values["status"] = "success"
                     values["file_prefix"] = "runs/\(config.launchID)/\(prefix)"
                     try saveInferFiles(m, prefix: prefix, saveMelIn: runIndex == 0)
+                    if let profile = m.profile {
+                        recordStages(profile, measurement: m, values: values)
+                    }
                 } catch {
                     values["thermal_after"] = ThesisRecorder.thermalState
                     values["status"] = "failed"
@@ -235,6 +255,29 @@ final class ThesisBenchRunner {
                     + "over1=\(values["deemph_over1_ratio"] ?? "-") status=\(values["status"] ?? "")")
             }
         }
+    }
+
+    private func recordStages(_ profile: StageProfiler, measurement m: ThesisPipeline.Measurement, values runValues: [String: String]) {
+        var values = recorder.commonValues()
+        for key in ["input_name", "run_index", "phase", "status"] {
+            values[key] = runValues[key]
+        }
+        let predictMs = ProfileStage.predictStages.map({ profile.ms($0) }).reduce(0, +)
+        values["decoder_steps"] = String(m.decoderStepMs.count)
+        values["e2e_ms"] = Self.ms(m.e2eMs)
+        values["profile_sum_ms"] = Self.ms(profile.sumMs)
+        values["profile_residual_ms"] = String(format: "%.6f", m.e2eMs - profile.sumMs)
+        values["predict_sum_ms"] = Self.ms(predictMs)
+        values["non_predict_ms"] = Self.ms(profile.sumMs - predictMs)
+        for stage in ProfileStage.all {
+            values["\(stage)_ms"] = Self.ms(profile.ms(stage))
+        }
+        // ProfileStage.all に無い区間名が混ざっていたら合計と列の和が合わなくなるので、ログで気づけるようにする
+        let unknown = Set(profile.totals.keys).subtracting(ProfileStage.all)
+        if !unknown.isEmpty {
+            ThesisRecorder.log("[thesis] WARN: 列に無い区間 \(unknown.sorted())")
+        }
+        recorder.appendRow(csvName: Self.stagesCsv, header: Self.stagesHeader, values: values)
     }
 
     private func inferValues(_ m: ThesisPipeline.Measurement) -> [String: String] {
@@ -287,7 +330,7 @@ final class ThesisBenchRunner {
     private func runVocoder() async throws {
         let urls = try ThesisPipeline.modelURLs(precision: precision)
         recorder.writeCrumb("mode=vocoder stage=load condition=\(config.conditionLabel)")
-        let hifi = try ThesisPipeline.loadModel(at: urls.hifigan, computeUnit: computeUnit)
+        let hifi = try ThesisPipeline.loadModel(at: urls.hifigan, computeUnit: hifiganComputeUnit)
         ThesisRecorder.log("[thesis] vocoder \(config.conditionLabel) loaded in \(Self.ms(hifi.ms)) ms")
         let runner = VocoderRunner(model: hifi.model, policy: ThesisBenchConfig.shapeMode.inputPolicy)
 
