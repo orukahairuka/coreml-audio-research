@@ -7,6 +7,14 @@ import CoreML
 ///
 /// 各ステップで前回までの出力全体を入力として渡す素朴な自己回帰実装になっており、
 /// CoreML の動的入力形状を使う。
+/// Decoder 入力（生成済みフレーム）を MLMultiArray に書き込む方法
+enum DecoderInputWrite: String {
+    /// `array[i] = NSNumber(value:)` を 1 要素ずつ（ch4-v3 までの方法。比較用に残す）
+    case element
+    /// 行優先で連続していることを確かめ、メモリをまとめてコピーする（既定）
+    case bulk
+}
+
 final class DecoderRunner {
     /// 通常の合成で、ステップごとの詳細統計を取るか。
     /// 既定は取らない（重いため）。調査のときは起動時の環境変数 `CMLA_DECODER_STEP_STATS=1` で有効にする
@@ -34,6 +42,7 @@ final class DecoderRunner {
     ///   - collectStepStats: ステップごとの詳細統計（mel_out / postnet_out の min・max・mean・NaN/Inf）を取るか。
     ///     出力全体を 1 要素ずつ読むので重く、合成結果には使わない。振幅異常などの調査のときだけ true にする。
     ///     false なら返す stepStats は空になる（合成した波形は変わらない）
+    ///   - inputWrite: 生成済みフレームを入力配列に書き込む方法。どちらでも入力配列の中身は同じになる
     /// - Returns: 最終ステップの postnet 出力、選別された各ステップの統計、`predict()` 全ステップ合計の所要時間 (ms)、
     ///            各ステップの `predict()` 所要時間 (ms)、入力 decoder_input に含まれた NaN/Inf 個数の全ステップ最大値
     func run(
@@ -43,7 +52,8 @@ final class DecoderRunner {
         onStep: @MainActor (Int) -> Void,
         debug: DebugRunSnapshot? = nil,
         profiler: StageProfiler? = nil,
-        collectStepStats: Bool = true
+        collectStepStats: Bool = true,
+        inputWrite: DecoderInputWrite = .bulk
     ) async throws -> (
         postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
         stepPredictMs: [Double], maxInputNonFiniteCount: Int
@@ -77,9 +87,8 @@ final class DecoderRunner {
             let inputLength = fixedLength ?? currentLength
             // 固定長では先頭 currentLength フレームだけ書き込むので、残り（未生成の部分）は 0 で埋めておく
             let decInput = try ModelInputArray.zeros(shape: [1, inputLength, nMels], dataType: .float32)
-            for i in 0..<(currentLength * nMels) {
-                decInput[i] = NSNumber(value: decoderInputData[i])
-            }
+            profiler?.lap(ProfileStage.decInputAlloc)
+            try Self.writeInput(decoderInputData, count: currentLength * nMels, into: decInput, method: inputWrite)
             profiler?.lap(ProfileStage.decInputFill)
             // 前ステップの出力が NaN/Inf でも止めない（不安定な条件の観測を後段まで残すため）
             let nonFiniteCount = try ModelInputArray.validateFloat32(
@@ -164,5 +173,17 @@ final class DecoderRunner {
             throw AudioSynthesizer.SynthesisError.decoderFailed
         }
         return (postnetOut, stepStats, totalPredictMs, stepPredictMs, maxInputNonFiniteCount)
+    }
+
+    /// 生成済みフレーム `data` の先頭 `count` 要素を、0 埋め済みの入力配列 `array` の先頭に書き込む
+    static func writeInput(_ data: [Float], count: Int, into array: MLMultiArray, method: DecoderInputWrite) throws {
+        switch method {
+        case .element:
+            for i in 0..<count {
+                array[i] = NSNumber(value: data[i])
+            }
+        case .bulk:
+            try ModelInputArray.copyFloat32(data, count: count, into: array, name: "Decoder input")
+        }
     }
 }

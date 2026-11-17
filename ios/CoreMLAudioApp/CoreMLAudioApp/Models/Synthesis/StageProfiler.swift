@@ -58,6 +58,9 @@ enum ProfileStage {
     static let encPredict = "enc_predict"
     static let encOutputExtract = "enc_output_extract"
     // Decoder（ステップごとに積算）
+    /// 入力配列の確保と 0 埋め（ch4-v4 で dec_input_fill から分けた）
+    static let decInputAlloc = "dec_input_alloc"
+    /// 生成済みフレームの書き込み（ch4-v3 までは確保と 0 埋めも含んでいた）
     static let decInputFill = "dec_input_fill"
     static let decInputValidate = "dec_input_validate"
     static let decPosFill = "dec_pos_fill"
@@ -80,7 +83,7 @@ enum ProfileStage {
     static let all: [String] = [
         audioLoad, melExtract,
         encInputFill, encInputValidate, encPosFill, encFeatureProvider, encPredict, encOutputExtract,
-        decInputFill, decInputValidate, decPosFill, decFeatureProvider, decPredict, decOutputExtract,
+        decInputAlloc, decInputFill, decInputValidate, decPosFill, decFeatureProvider, decPredict, decOutputExtract,
         decStepStats, decAutoregressRead, decProgressYield,
         vocInputTranspose, vocInputValidate, vocFeatureProvider, vocPredict, vocOutputRead,
         deemph,

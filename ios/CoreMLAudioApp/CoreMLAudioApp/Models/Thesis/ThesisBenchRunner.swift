@@ -236,7 +236,8 @@ final class ThesisBenchRunner {
         ThesisRecorder.log("[thesis] infer \(config.conditionLabel) loaded in "
             + Self.ms(enc.ms + dec.ms + hifi.ms) + " ms")
         let pipeline = ThesisPipeline(
-            encoder: enc.model, decoder: dec.model, hifigan: hifi.model, decoderStepStats: config.decoderStepStats
+            encoder: enc.model, decoder: dec.model, hifigan: hifi.model, decoderStepStats: config.decoderStepStats,
+            decoderInputWrite: config.decoderInputWrite
         )
 
         let names = try config.inputNames ?? ThesisPipeline.inputInfos().map({ $0.input_name })
