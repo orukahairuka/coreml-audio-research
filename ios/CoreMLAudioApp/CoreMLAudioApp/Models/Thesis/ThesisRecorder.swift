@@ -75,9 +75,16 @@ final class ThesisRecorder {
 
     // MARK: - CSV
 
-    /// `name` の CSV に 1 行追記する。ファイルが無ければ見出しを先に書く
+    /// `name` の CSV に 1 行追記する。ファイルが無ければ見出しを先に書く。
+    /// 既にあるファイルの見出しが違う（列を足す前のコードで作ったセッションに追記しようとした）ときは、
+    /// 列がずれた行を混ぜないよう `<name>_<bench_version>.csv` に書く
     func appendRow(csvName: String, header: [String], values: [String: String]) {
-        let url = directory.appendingPathComponent(csvName)
+        var url = directory.appendingPathComponent(csvName)
+        if let existing = Self.firstLine(of: url), existing != header.joined(separator: ",") {
+            let stem = (csvName as NSString).deletingPathExtension
+            url = directory.appendingPathComponent("\(stem)_\(ThesisBenchConfig.benchVersion).csv")
+            Self.log("[thesis] WARN: \(csvName) の見出しが違うので \(url.lastPathComponent) に書く")
+        }
         var text = ""
         if !FileManager.default.fileExists(atPath: url.path) {
             text += header.joined(separator: ",") + "\n"
@@ -92,6 +99,15 @@ final class ThesisRecorder {
         } else {
             try? data.write(to: url)
         }
+    }
+
+    /// ファイルの 1 行目（無ければ nil）
+    static func firstLine(of url: URL) -> String? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 64 * 1024), !data.isEmpty else { return nil }
+        let text = String(decoding: data, as: UTF8.self)
+        return text.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first.map({ String($0) })
     }
 
     /// カンマ・改行・引用符を含む値は引用符で囲む

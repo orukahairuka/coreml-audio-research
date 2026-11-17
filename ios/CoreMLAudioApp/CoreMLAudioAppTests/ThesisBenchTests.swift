@@ -107,6 +107,21 @@ struct ThesisBenchTests {
         #expect(Array(ThesisBenchRunner.runHeader.suffix(ThesisRecorder.versionHeader.count)) == ThesisRecorder.versionHeader)
     }
 
+    @Test func appendRowAvoidsMixingDifferentHeaders() throws {
+        let env = [
+            "CMLA_THESIS_BENCH": "load", "CMLA_THESIS_SESSION": "unittest_\(UUID().uuidString)",
+            "CMLA_THESIS_PRECISION": "Float32", "CMLA_THESIS_CU": "cpuOnly",
+        ]
+        let recorder = try ThesisRecorder(config: try ThesisBenchConfig.fromEnvironment(env))
+        defer { try? FileManager.default.removeItem(at: recorder.directory) }
+        recorder.appendRow(csvName: "t.csv", header: ["a", "b"], values: ["a": "1"])
+        recorder.appendRow(csvName: "t.csv", header: ["a", "b", "c"], values: ["c": "3"])
+        let old = try String(contentsOf: recorder.directory.appendingPathComponent("t.csv"), encoding: .utf8)
+        #expect(old == "a,b\n1,\n")
+        let new = try String(contentsOf: recorder.directory.appendingPathComponent("t_\(ThesisBenchConfig.benchVersion).csv"), encoding: .utf8)
+        #expect(new == "a,b,c\n,,3\n")
+    }
+
     @Test func configRequiresConditionExceptThermal() throws {
         #expect(throws: ThesisBenchConfig.ConfigError.self) {
             _ = try ThesisBenchConfig.fromEnvironment(["CMLA_THESIS_BENCH": "load", "CMLA_THESIS_CU": "all"])
