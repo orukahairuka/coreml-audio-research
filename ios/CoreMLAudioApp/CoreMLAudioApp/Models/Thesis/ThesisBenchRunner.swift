@@ -43,9 +43,24 @@ final class ThesisBenchRunner {
             runner.recorder.removeCrumb()
             ThesisRecorder.log("THESIS_BENCH_DONE status=ok")
             return 0
+        } catch let error as RunError {
+            // 実行は最後まで行ったが、一部が失敗した（PC 側は status=ok 以外を failed として記録する）
+            ThesisRecorder.log("THESIS_BENCH_DONE status=failed error=\(error.localizedDescription)")
+            return 1
         } catch {
             ThesisRecorder.log("THESIS_BENCH_DONE status=setup_failed error=\(error.localizedDescription)")
             return 1
+        }
+    }
+
+    /// 最後まで実行したが一部が失敗したことを、起動の結果として PC 側に伝えるためのエラー
+    enum RunError: LocalizedError {
+        case planFailed(models: [String])
+
+        var errorDescription: String? {
+            switch self {
+            case .planFailed(let models): return "MLComputePlan を保存できなかったモデル: \(models.joined(separator: ","))"
+            }
         }
     }
 
@@ -137,6 +152,8 @@ final class ThesisBenchRunner {
             ("encoder", urls.encoder, computeUnit), ("decoder", urls.decoder, computeUnit),
             ("hifigan", urls.hifigan, hifiganComputeUnit),
         ]
+        // 1 つ失敗しても残りのモデルは試し、最後に失敗したモデルをまとめてエラーにする
+        var failedModels = [String]()
         for model in models {
             recorder.writeCrumb("mode=plan model=\(model.name) condition=\(config.conditionLabel)")
             let inspector = ComputePlanInspector(
@@ -151,7 +168,11 @@ final class ThesisBenchRunner {
                 ThesisRecorder.log("[thesis] plan \(config.conditionLabel) \(model.name) \(summary)")
             } catch {
                 ThesisRecorder.log("[thesis] plan \(config.conditionLabel) \(model.name) failed: \(error.localizedDescription)")
+                failedModels.append(model.name)
             }
+        }
+        if !failedModels.isEmpty {
+            throw RunError.planFailed(models: failedModels)
         }
     }
 

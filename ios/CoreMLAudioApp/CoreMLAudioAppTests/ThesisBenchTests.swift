@@ -122,6 +122,13 @@ struct ThesisBenchTests {
         #expect(new == "a,b,c\n,,3\n")
     }
 
+    @Test func planFailureNamesEveryFailedModel() {
+        let error = ThesisBenchRunner.RunError.planFailed(models: ["encoder", "hifigan"])
+        let message = error.localizedDescription
+        #expect(message.contains("encoder"))
+        #expect(message.contains("hifigan"))
+    }
+
     @Test func configRequiresConditionExceptThermal() throws {
         #expect(throws: ThesisBenchConfig.ConfigError.self) {
             _ = try ThesisBenchConfig.fromEnvironment(["CMLA_THESIS_BENCH": "load", "CMLA_THESIS_CU": "all"])
