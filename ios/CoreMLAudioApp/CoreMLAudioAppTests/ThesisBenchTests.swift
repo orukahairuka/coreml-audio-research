@@ -28,6 +28,21 @@ struct ThesisBenchTests {
         #expect(config.sessionDirectory.path.hasSuffix("Result/thesis/s1"))
     }
 
+    // MARK: - StageProfiler
+
+    @Test func profilerLapsPartitionTheSpan() {
+        let profiler = StageProfiler()
+        profiler.start()
+        for _ in 0..<3 {
+            profiler.lap(ProfileStage.decInputFill)
+            profiler.lap(ProfileStage.decPredict)
+        }
+        profiler.lap(ProfileStage.deemph)
+        #expect(profiler.counts[ProfileStage.decInputFill] == 3)
+        #expect(profiler.counts[ProfileStage.deemph] == 1)
+        #expect(abs(profiler.sumMs - profiler.spanMs) < 1e-6)
+    }
+
     @Test func configRequiresConditionExceptThermal() throws {
         #expect(throws: ThesisBenchConfig.ConfigError.self) {
             _ = try ThesisBenchConfig.fromEnvironment(["CMLA_THESIS_BENCH": "load", "CMLA_THESIS_CU": "all"])

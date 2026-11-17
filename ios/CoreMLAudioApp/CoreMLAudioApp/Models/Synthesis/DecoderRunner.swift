@@ -24,6 +24,7 @@ final class DecoderRunner {
     ///   - onStep: 各ステップ完了時に呼ばれる (引数は完了済みステップ数, 1-indexed)
     ///   - debug: 調査用 snapshot (nil なら何もしない)。各 step の mel_out / postnet_out の
     ///            sha256 + stats を `decoder_steps.csv` に追記する。
+    ///   - profiler: 処理別計測（卒論第4章の追加計測用）。各区間はステップごとに積算する。nil なら計測しない
     /// - Returns: 最終ステップの postnet 出力、選別された各ステップの統計、`predict()` 全ステップ合計の所要時間 (ms)、
     ///            各ステップの `predict()` 所要時間 (ms)、入力 decoder_input に含まれた NaN/Inf 個数の全ステップ最大値
     func run(
@@ -31,7 +32,8 @@ final class DecoderRunner {
         frameCount: Int,
         nMels: Int,
         onStep: @MainActor (Int) -> Void,
-        debug: DebugRunSnapshot? = nil
+        debug: DebugRunSnapshot? = nil,
+        profiler: StageProfiler? = nil
     ) async throws -> (
         postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
         stepPredictMs: [Double], maxInputNonFiniteCount: Int
@@ -68,6 +70,7 @@ final class DecoderRunner {
             for i in 0..<(currentLength * nMels) {
                 decInput[i] = NSNumber(value: decoderInputData[i])
             }
+            profiler?.lap(ProfileStage.decInputFill)
             // 前ステップの出力が NaN/Inf でも止めない（不安定な条件の観測を後段まで残すため）
             let nonFiniteCount = try ModelInputArray.validateFloat32(
                 decInput, paddingRanges: [(currentLength * nMels)..<(inputLength * nMels)], name: "Decoder input"
@@ -76,23 +79,27 @@ final class DecoderRunner {
             if nonFiniteCount > 0 {
                 print("[DecoderRunner] WARN: step=\(step) decoder_input contains \(nonFiniteCount) NaN/Inf values")
             }
+            profiler?.lap(ProfileStage.decInputValidate)
 
             // pos: [1, currentLength]
             let decPos = try MLMultiArray(shape: [1, inputLength as NSNumber], dataType: .int32)
             for i in 0..<inputLength {
                 decPos[i] = NSNumber(value: Int32(i + 1))
             }
+            profiler?.lap(ProfileStage.decPosFill)
 
             let input = try MLDictionaryFeatureProvider(dictionary: [
                 "memory": MLFeatureValue(multiArray: memory),
                 "decoder_input": MLFeatureValue(multiArray: decInput),
                 "pos": MLFeatureValue(multiArray: decPos)
             ])
+            profiler?.lap(ProfileStage.decFeatureProvider)
             let t0 = CFAbsoluteTimeGetCurrent()
             let output = try await model.prediction(from: input)
             let stepMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
             totalPredictMs += stepMs
             stepPredictMs.append(stepMs)
+            profiler?.lap(ProfileStage.decPredict)
 
             // mel_out は変換時に明示命名済み。postnet 出力は残りのキーから取得
             let postnetKey = output.featureNames.first(where: { $0 != "mel_out" }) ?? ""
@@ -102,6 +109,7 @@ final class DecoderRunner {
             guard let melOut = lastMelOut else {
                 throw AudioSynthesizer.SynthesisError.decoderFailed
             }
+            profiler?.lap(ProfileStage.decOutputExtract)
 
             // ステップ統計の選別記録: 先頭 5 + 中間 5 + 末尾 5 + NaN/Inf 検出時は全ステップ
             let melStats = ArrayStats.compute(from: melOut)
@@ -121,12 +129,14 @@ final class DecoderRunner {
                     step: step, melOut: melStats, postnetOut: postStats
                 ))
             }
+            profiler?.lap(ProfileStage.decStepStats)
 
             // 最後のフレームを次の入力に追加（自己回帰）
             for i in 0..<nMels {
                 decoderInputData.append(melOut[[0, (currentLength - 1) as NSNumber, i as NSNumber]].floatValue)
             }
             currentLength += 1
+            profiler?.lap(ProfileStage.decAutoregressRead)
 
             // 進捗通知（パーセント計算は呼び出し側に任せる）
             await MainActor.run { onStep(step + 1) }
@@ -135,6 +145,7 @@ final class DecoderRunner {
             if step % 10 == 0 {
                 await Task.yield()
             }
+            profiler?.lap(ProfileStage.decProgressYield)
         }
 
         guard let postnetOut = lastPostnetOut else {

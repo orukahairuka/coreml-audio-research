@@ -25,9 +25,10 @@ final class VocoderRunner {
     ///   - postnetOut: Decoder の postnet 出力 [1, T, nMels] (T は可変)
     ///   - totalFrames: T (時間方向のフレーム数)
     ///   - nMels: メルビン数 (256)
+    ///   - profiler: 処理別計測（卒論第4章の追加計測用）。nil なら計測しない
     /// - Returns: 合成波形 (デエンファシス前の生 PCM, 22050 Hz, 長さ = `contentT * hopSize`),
     ///            `predict()` の所要時間 (ms), モデルに渡した実効 T (`inputT`), 入力メルに含まれた NaN/Inf の個数
-    func run(postnetOut: MLMultiArray, totalFrames: Int, nMels: Int) async throws -> (
+    func run(postnetOut: MLMultiArray, totalFrames: Int, nMels: Int, profiler: StageProfiler? = nil) async throws -> (
         waveform: [Float], predictMs: Double, inputT: Int, inputNonFiniteCount: Int
     ) {
         // policy に応じてモデルへ渡す T (inputT) と「中身のあるフレーム数」(contentT) を決める。
@@ -59,6 +60,7 @@ final class VocoderRunner {
                 input[[0, m as NSNumber, t as NSNumber]] = postnetOut[[0, t as NSNumber, m as NSNumber]]
             }
         }
+        profiler?.lap(ProfileStage.vocInputTranspose)
         // 各メル帯域の行 [m * inputT + contentT, (m + 1) * inputT) が 0 のままのはず
         // Decoder 出力が NaN/Inf でも止めない（HiFi-GAN 出力の NaN/Inf として記録するため）
         let nonFiniteCount = try ModelInputArray.validateFloat32(
@@ -70,14 +72,17 @@ final class VocoderRunner {
             print("[VocoderRunner] WARN: mel contains \(nonFiniteCount) NaN/Inf values")
         }
         print("[VocoderRunner] mel shape: \(input.shape) (T=\(totalFrames), inputT=\(inputT), contentT=\(contentT), nMels=\(nMels))")
+        profiler?.lap(ProfileStage.vocInputValidate)
 
         // 2. CoreML predict (時間計測は predict 呼び出しのみ)
         let inputProvider = try MLDictionaryFeatureProvider(dictionary: [
             "mel": MLFeatureValue(multiArray: input)
         ])
+        profiler?.lap(ProfileStage.vocFeatureProvider)
         let t0 = CFAbsoluteTimeGetCurrent()
         let output = try await model.prediction(from: inputProvider)
         let predictMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
+        profiler?.lap(ProfileStage.vocPredict)
 
         guard let waveformFeature = output.featureValue(for: output.featureNames.first ?? ""),
               let waveformArray = waveformFeature.multiArrayValue else {
@@ -92,6 +97,7 @@ final class VocoderRunner {
         for i in 0..<sampleCount {
             waveform[i] = waveformArray[i].floatValue
         }
+        profiler?.lap(ProfileStage.vocOutputRead)
         return (waveform, predictMs, inputT, nonFiniteCount)
     }
 }
