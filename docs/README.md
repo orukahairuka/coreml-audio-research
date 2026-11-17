@@ -45,6 +45,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-06-25 | [coreai-device-inference-design](2026-06-25/coreai-device-inference-design.md) | Phase 2 設計メモ。CoreML後継 Core AI に変換した `.aimodel` を iPhone(3)@27.0 で cpu/gpu/neuralEngine 比較する実機推論パスの設計。.aimodel一覧、追加ファイル、流用すべきCoreML既存実装、Core AIのload/compile/run、compute unit切替（SpecializationOptions.preferredComputeUnitKind）、最小構成はHiFi-GAN単体推奨、速度/PSNR/MCD/clipping記録方針。fp16はexport時でなく実行時compute unitで決まる点が鍵 |
 | 2026-10-22 | [thesis-ch4-benchmark-report](2026-10-22/thesis-ch4-benchmark-report.md) | 卒論第4章の計測の報告。UI を使わない計測モードと PC 側の起動・集計スクリプトを実装し、iPhone 13（iOS 27.2.0）と iPhone 17 Pro（iOS 27.0.0）で 12 条件 × 4 入力を計測。振幅の異常は F16/Int8×{cpuAndNE,all} の4条件の HiFi-GAN 段だけで両端末同値、WAV 保存はクリップ、起動し直しただけの初回の読み込みは数 ms、E2E の約2/3はモデル呼び出し以外、iOS の T は PyTorch より4フレーム少ない。本文 4-1 節で直す点の一覧つき |
 | 2026-10-22 | [thesis-ch4-handoff](2026-10-22/thesis-ch4-handoff.md) | 卒論第4章の計測を別セッションで引き継ぐためのメモ。状態と残り、ファイルの場所、計測の回し方、ハマりどころ（iOS 27 シミュで XCTest が止まる、署名の信頼、起動し直しでは初回にならない等）、ユーザーとの約束ごと |
+| 2026-11-18 | [transformer-equivalence](2026-11-18/transformer-equivalence.md) | PyTorch 版と Core ML 版（Float32・CPU）の Transformer Encoder・Decoder の同等性検証。同じメル（Swift の前処理）を入れ、4 入力で変換による差は 1e-4 未満（cos≈1、自己回帰でも蓄積なし）。差は固定長化から生じ、T'<262 の入力 2・11 で Encoder がマスクなしで 0 埋め部分を参照して出力が変わる（Encoder 出力 cos 0.10〜0.15、Postnet cos 0.95〜0.96）。Decoder 入力の 0 埋めは因果マスクで影響なし |
 
 ## トピック別
 
@@ -97,6 +98,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [ios-feasibility-evaluation-report](2026-06-21/ios-feasibility-evaluation-report.md)
 - [thesis-ch4-benchmark-report](2026-10-22/thesis-ch4-benchmark-report.md)
 - [thesis-ch4-handoff](2026-10-22/thesis-ch4-handoff.md)
+- [transformer-equivalence](2026-11-18/transformer-equivalence.md)
 
 ### ブランチ・PR まとめ
 
