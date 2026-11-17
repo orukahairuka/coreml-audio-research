@@ -44,8 +44,11 @@ final class ThesisPipeline {
     private let hifigan: MLModel
     private let transformerPolicy: TransformerInputPolicy
     private let vocoderPolicy: VocoderInputPolicy
+    /// Decoder のステップごとの詳細統計を取るか（調査用。合成した波形は変わらない）
+    private let decoderStepStats: Bool
 
-    init(encoder: MLModel, decoder: MLModel, hifigan: MLModel) {
+    init(encoder: MLModel, decoder: MLModel, hifigan: MLModel, decoderStepStats: Bool = false) {
+        self.decoderStepStats = decoderStepStats
         self.encoder = encoder
         self.decoder = decoder
         self.hifigan = hifigan
@@ -170,7 +173,8 @@ final class ThesisPipeline {
             frameCount: effectiveFrames,
             nMels: nMels,
             onStep: { _ in },
-            profiler: profiler
+            profiler: profiler,
+            collectStepStats: decoderStepStats
         )
 
         // 4. HiFi-GAN

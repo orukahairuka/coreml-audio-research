@@ -51,8 +51,9 @@ PRECISIONS = ["Float32", "Float16", "Int8"]
 COMPUTE_UNITS = ["cpuOnly", "cpuAndGPU", "cpuAndNE", "all"]
 ALL_CONDITIONS = [(p, cu, None) for cu in COMPUTE_UNITS for p in PRECISIONS]
 
-# 追加計測（混合 Compute Units・処理別計測）に対応した版。アプリ側の ThesisBenchConfig.benchVersion と同じ
-BENCH_VERSION = "ch4-v2"
+# 計測コードの版。アプリ側の ThesisBenchConfig.benchVersion と同じ
+# ch4-v2: 混合 Compute Units・処理別計測を追加 / ch4-v3: Decoder のステップごとの統計を既定で取らない
+BENCH_VERSION = "ch4-v3"
 
 
 def cu_label(cu: str, hifi_cu: str | None) -> str:
@@ -68,7 +69,7 @@ HOST_HEADER = [
     "encdec_compute_units", "hifigan_compute_units", "bench_version", "profile_enabled",
     # thermal_at_start は計測を始めるときの状態（最後に確認した状態）。ch4-v2 より前は最初に確認した状態を
     # 書いていたので、bench_version 列が無い行の thermal_at_start は thermal_checks.csv で読み直すこと
-    "thermal_first_check",
+    "thermal_first_check", "decoder_step_stats",
 ]
 THERMAL_HEADER = ["session_id", "checked_at", "before_launch_id", "state", "status"]
 
@@ -277,6 +278,8 @@ class Bench:
             env["CMLA_THESIS_CU_HIFI"] = hifi_cu
         if self.args.profile:
             env["CMLA_THESIS_PROFILE"] = "1"
+        if self.args.step_stats:
+            env["CMLA_THESIS_STEP_STATS"] = "1"
         label = cu_label(cu, hifi_cu)
         print(f"[{now_iso()}] {launch_id} {mode} {precision}:{label} #{launch_index} (thermal wait {thermal_wait:.0f}s)")
         started_at = now_iso()
@@ -293,7 +296,7 @@ class Bench:
             "log_path": f"logs/{launch_id}.log",
             "encdec_compute_units": cu, "hifigan_compute_units": hifi_cu or cu,
             "bench_version": BENCH_VERSION, "profile_enabled": int(self.args.profile),
-            "thermal_first_check": thermal_first,
+            "thermal_first_check": thermal_first, "decoder_step_stats": int(self.args.step_stats),
         })
         self.after_install = False
 
@@ -349,6 +352,8 @@ def main() -> int:
                         "Float16:cpuAndNE:cpuOnly のように 3 つ目を書くと HiFi-GAN だけその CU で読み込む")
     parser.add_argument("--profile", action="store_true",
                         help="infer で End-to-End を処理別に計測する（アプリが infer_stages.csv を出す）")
+    parser.add_argument("--step-stats", action="store_true",
+                        help="Decoder のステップごとの詳細統計を取る（調査用。ch4-v2 までの計測と同じ処理になる）")
     parser.add_argument("--inputs", help="入力の名前をカンマ区切りで（既定はアプリの thesis_inputs.json の順）")
     parser.add_argument("--load-install-launches", type=int, default=3,
                         help="load で条件ごとに「インストールし直してから起動」する回数")

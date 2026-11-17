@@ -235,7 +235,9 @@ final class ThesisBenchRunner {
         let hifi = try ThesisPipeline.loadModel(at: urls.hifigan, computeUnit: hifiganComputeUnit)
         ThesisRecorder.log("[thesis] infer \(config.conditionLabel) loaded in "
             + Self.ms(enc.ms + dec.ms + hifi.ms) + " ms")
-        let pipeline = ThesisPipeline(encoder: enc.model, decoder: dec.model, hifigan: hifi.model)
+        let pipeline = ThesisPipeline(
+            encoder: enc.model, decoder: dec.model, hifigan: hifi.model, decoderStepStats: config.decoderStepStats
+        )
 
         let names = try config.inputNames ?? ThesisPipeline.inputInfos().map({ $0.input_name })
         var isFirstAfterLoad = true

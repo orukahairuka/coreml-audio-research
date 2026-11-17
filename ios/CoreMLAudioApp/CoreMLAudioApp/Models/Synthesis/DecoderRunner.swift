@@ -8,6 +8,12 @@ import CoreML
 /// 各ステップで前回までの出力全体を入力として渡す素朴な自己回帰実装になっており、
 /// CoreML の動的入力形状を使う。
 final class DecoderRunner {
+    /// 通常の合成で、ステップごとの詳細統計を取るか。
+    /// 既定は取らない（重いため）。調査のときは起動時の環境変数 `CMLA_DECODER_STEP_STATS=1` で有効にする
+    static var stepStatsEnabledByEnvironment: Bool {
+        ProcessInfo.processInfo.environment["CMLA_DECODER_STEP_STATS"] == "1"
+    }
+
     private let model: MLModel
     private let policy: TransformerInputPolicy
 
@@ -25,6 +31,9 @@ final class DecoderRunner {
     ///   - debug: 調査用 snapshot (nil なら何もしない)。各 step の mel_out / postnet_out の
     ///            sha256 + stats を `decoder_steps.csv` に追記する。
     ///   - profiler: 処理別計測（卒論第4章の追加計測用）。各区間はステップごとに積算する。nil なら計測しない
+    ///   - collectStepStats: ステップごとの詳細統計（mel_out / postnet_out の min・max・mean・NaN/Inf）を取るか。
+    ///     出力全体を 1 要素ずつ読むので重く、合成結果には使わない。振幅異常などの調査のときだけ true にする。
+    ///     false なら返す stepStats は空になる（合成した波形は変わらない）
     /// - Returns: 最終ステップの postnet 出力、選別された各ステップの統計、`predict()` 全ステップ合計の所要時間 (ms)、
     ///            各ステップの `predict()` 所要時間 (ms)、入力 decoder_input に含まれた NaN/Inf 個数の全ステップ最大値
     func run(
@@ -33,7 +42,8 @@ final class DecoderRunner {
         nMels: Int,
         onStep: @MainActor (Int) -> Void,
         debug: DebugRunSnapshot? = nil,
-        profiler: StageProfiler? = nil
+        profiler: StageProfiler? = nil,
+        collectStepStats: Bool = true
     ) async throws -> (
         postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
         stepPredictMs: [Double], maxInputNonFiniteCount: Int
@@ -111,23 +121,25 @@ final class DecoderRunner {
             }
             profiler?.lap(ProfileStage.decOutputExtract)
 
-            // ステップ統計の選別記録: 先頭 5 + 中間 5 + 末尾 5 + NaN/Inf 検出時は全ステップ
-            let melStats = ArrayStats.compute(from: melOut)
-            let postStats = lastPostnetOut.map { ArrayStats.compute(from: $0) }
-                ?? ArrayStats(min: 0, max: 0, mean: 0, hasNaN: false, hasInf: false)
-
             // 調査用: 全 step の sha + stats を CSV に append (debug enabled 時のみ)
             debug?.appendDecoderStep(step: step, melOut: melOut, postnetOut: lastPostnetOut)
 
-            let shouldRecord = step < 5
-                || step >= effectiveFrameCount - 5
-                || (effectiveFrameCount > 10 && step >= effectiveFrameCount / 2 - 2 && step <= effectiveFrameCount / 2 + 2)
-                || melStats.hasNaN || melStats.hasInf
-                || postStats.hasNaN || postStats.hasInf
-            if shouldRecord {
-                stepStats.append(DecoderStepStats(
-                    step: step, melOut: melStats, postnetOut: postStats
-                ))
+            if collectStepStats {
+                // ステップ統計の選別記録: 先頭 5 + 中間 5 + 末尾 5 + NaN/Inf 検出時は全ステップ
+                let melStats = ArrayStats.compute(from: melOut)
+                let postStats = lastPostnetOut.map { ArrayStats.compute(from: $0) }
+                    ?? ArrayStats(min: 0, max: 0, mean: 0, hasNaN: false, hasInf: false)
+
+                let shouldRecord = step < 5
+                    || step >= effectiveFrameCount - 5
+                    || (effectiveFrameCount > 10 && step >= effectiveFrameCount / 2 - 2 && step <= effectiveFrameCount / 2 + 2)
+                    || melStats.hasNaN || melStats.hasInf
+                    || postStats.hasNaN || postStats.hasInf
+                if shouldRecord {
+                    stepStats.append(DecoderStepStats(
+                        step: step, melOut: melStats, postnetOut: postStats
+                    ))
+                }
             }
             profiler?.lap(ProfileStage.decStepStats)
 
