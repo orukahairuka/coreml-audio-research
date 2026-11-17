@@ -66,6 +66,9 @@ HOST_HEADER = [
     "load_kind", "after_install", "thermal_wait_sec", "thermal_at_start", "started_at", "ended_at",
     "elapsed_sec", "status", "exit_code", "crumb", "log_path",
     "encdec_compute_units", "hifigan_compute_units", "bench_version", "profile_enabled",
+    # thermal_at_start は計測を始めるときの状態（最後に確認した状態）。ch4-v2 より前は最初に確認した状態を
+    # 書いていたので、bench_version 列が無い行の thermal_at_start は thermal_checks.csv で読み直すこと
+    "thermal_first_check",
 ]
 THERMAL_HEADER = ["session_id", "checked_at", "before_launch_id", "state", "status"]
 
@@ -216,8 +219,9 @@ class Bench:
         })
         return state
 
-    def wait_nominal(self, before_launch_id: str) -> tuple[float, str]:
-        """thermal が --thermal-ok-states（既定 nominal）に戻るまで待つ。(待った秒数, 最初に確認した状態) を返す"""
+    def wait_nominal(self, before_launch_id: str) -> tuple[float, str, str]:
+        """thermal が --thermal-ok-states（既定 nominal）に戻るまで待つ。
+        (待った秒数, 最初に確認した状態, 最後に確認した状態＝計測を始めるときの状態) を返す"""
         started = time.monotonic()
         first = None
         unknown_streak = 0
@@ -232,13 +236,13 @@ class Bench:
                 first = state
                 if state in self.args.thermal_ok_states:
                     # 最初の確認で nominal なら待っていない（確認の起動にかかった時間は含めない）
-                    return 0.0, first
+                    return 0.0, first, state
             waited = time.monotonic() - started
             if state in self.args.thermal_ok_states:
-                return waited, first
+                return waited, first, state
             if waited > self.args.thermal_max_wait:
                 print(f"  thermal が {self.args.thermal_max_wait}s 待っても {state} のまま。そのまま進める")
-                return waited, first
+                return waited, first, state
             print(f"  thermal={state} → {self.args.thermal_poll}s 待つ")
             time.sleep(self.args.thermal_poll)
 
@@ -253,9 +257,9 @@ class Bench:
     def run_one(self, mode: str, precision: str, cu: str, hifi_cu: str | None, launch_index: int,
                 wait_thermal: bool, load_kind: str = "") -> None:
         launch_id = self.next_launch_id(mode)
-        thermal_wait, thermal_state = (0.0, "")
+        thermal_wait, thermal_first, thermal_state = (0.0, "", "")
         if wait_thermal:
-            thermal_wait, thermal_state = self.wait_nominal(launch_id)
+            thermal_wait, thermal_first, thermal_state = self.wait_nominal(launch_id)
         if load_kind == "after_install":
             # thermal の確認でアプリを起動するので、インストールはその後（起動の直前）に行う
             self.after_install = self.target.install(Path(self.args.install))
@@ -289,6 +293,7 @@ class Bench:
             "log_path": f"logs/{launch_id}.log",
             "encdec_compute_units": cu, "hifigan_compute_units": hifi_cu or cu,
             "bench_version": BENCH_VERSION, "profile_enabled": int(self.args.profile),
+            "thermal_first_check": thermal_first,
         })
         self.after_install = False
 
