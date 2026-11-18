@@ -84,6 +84,16 @@ final class DecoderRunner {
             print("[DecoderRunner] WARN: frameCount=\(frameCount) > maxLength=\(maxLength), cropped to \(effectiveFrameCount)")
         }
 
+        // 固定長のとき、中身が毎回同じ pos の配列は 1 つを使い回せる
+        var reusablePos: MLMultiArray?
+        if let fixedLength, optimizations.contains(.reuseDecoderPos) {
+            let array = try MLMultiArray(shape: [1, fixedLength as NSNumber], dataType: .int32)
+            for i in 0..<fixedLength {
+                array[i] = NSNumber(value: Int32(i + 1))
+            }
+            reusablePos = array
+        }
+
         for step in 0..<effectiveFrameCount {
             // decoder_input: [1, currentLength, 256]
             let inputLength = fixedLength ?? currentLength
@@ -103,9 +113,14 @@ final class DecoderRunner {
             profiler?.lap(ProfileStage.decInputValidate)
 
             // pos: [1, currentLength]
-            let decPos = try MLMultiArray(shape: [1, inputLength as NSNumber], dataType: .int32)
-            for i in 0..<inputLength {
-                decPos[i] = NSNumber(value: Int32(i + 1))
+            let decPos: MLMultiArray
+            if let reusablePos {
+                decPos = reusablePos
+            } else {
+                decPos = try MLMultiArray(shape: [1, inputLength as NSNumber], dataType: .int32)
+                for i in 0..<inputLength {
+                    decPos[i] = NSNumber(value: Int32(i + 1))
+                }
             }
             profiler?.lap(ProfileStage.decPosFill)
 
