@@ -280,6 +280,12 @@ struct ContentView: View {
             }
             .navigationTitle("CoreML Audio")
         }
+        .task({
+            // 起動時の環境変数 CMLA_RESPONSE_BENCH=1 のときだけ、通常の画面のまま応答時間を計測して終了する
+            guard ResponseBenchConfig.isRequested else { return }
+            let code = await ResponseBenchDriver.run(viewModel: viewModel)
+            exit(code)
+        })
     }
 }
 

@@ -5,6 +5,8 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
 
     private var player: AVAudioPlayer?
     var onPlaybackFinished: (() -> Void)?
+    /// 通常操作の応答時間の計測点（計測モードのときだけ設定される。nil なら何もしない）
+    weak var responseProbe: ResponseTimeProbe?
 
     var isPlaying: Bool {
         player?.isPlaying ?? false
@@ -68,6 +70,7 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         let outputURL = resultDir.appendingPathComponent(fileName)
 
         try WavWriter.writeInt16(buffer: buffer, to: outputURL)
+        responseProbe?.mark(.e)
 
         let newPlayer = try AVAudioPlayer(contentsOf: outputURL)
         newPlayer.delegate = self
@@ -75,7 +78,10 @@ final class AudioPlayer: NSObject, AVAudioPlayerDelegate {
         newPlayer.prepareToPlay()
         // play() は再生開始に失敗すると throw せず false を返す。ここで弾かないと
         // didFinishPlaying が永久に来ず、呼び出し側の継続が宙吊りになる。
-        guard newPlayer.play() else {
+        responseProbe?.mark(.f)
+        let started = newPlayer.play()
+        responseProbe?.mark(.g)
+        guard started else {
             throw PlaybackError.playbackStartFailed
         }
         player = newPlayer

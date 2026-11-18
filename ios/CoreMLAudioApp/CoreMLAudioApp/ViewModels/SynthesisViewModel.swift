@@ -44,6 +44,11 @@ final class SynthesisViewModel {
     private(set) var synthesisResult: SynthesisResult?
     private var playbackContinuation: CheckedContinuation<Void, Never>?
 
+    /// 通常操作の応答時間の計測点（応答時間の計測モードのときだけ設定する。nil なら何もしない）
+    var responseProbe: ResponseTimeProbe? {
+        didSet { audioPlayer.responseProbe = responseProbe }
+    }
+
     // 安定性テストのサマリ（テスト直後に表示する）
     private(set) var stabilityCsvURL: URL?
     private(set) var stabilitySummary: String?
@@ -63,6 +68,7 @@ final class SynthesisViewModel {
             Task { @MainActor in
                 guard let self = self else { return }
                 self.isPlaying = false
+                self.responseProbe?.mark(.end)
                 if let cont = self.playbackContinuation {
                     self.playbackContinuation = nil
                     cont.resume()
@@ -127,7 +133,20 @@ final class SynthesisViewModel {
 
     // MARK: - Synthesis Actions
 
+    /// 現在の選択（精度・Compute Units・shape mode）でモデルを読み込む。
+    /// `runSynthesis()` の先頭と同じ `loadModels` を呼ぶので、読み込み済みなら何もしない
+    func loadModelsForCurrentSelection() throws {
+        try synthesizer.loadModels(
+            precision: selectedPrecision,
+            computeUnits: selectedComputeUnit.encoderDecoderUnit.mlComputeUnits,
+            hifiganComputeUnits: selectedComputeUnit.hifiganUnit.mlComputeUnits,
+            shapeMode: selectedShapeMode
+        )
+    }
+
     func runSynthesis() async {
+        responseProbe?.reset()
+        responseProbe?.mark(.entry)
         errorMessage = nil
         synthesisResult = nil
         isProcessing = true
@@ -148,6 +167,7 @@ final class SynthesisViewModel {
                 hifiganComputeUnits: selectedComputeUnit.hifiganUnit.mlComputeUnits,
                 shapeMode: selectedShapeMode
             )
+            responseProbe?.mark(.a)
             status = "モデルロード完了 (\(selectedPrecision.rawValue), \(selectedShapeMode.displayName), \(selectedComputeUnit.displayName))"
 
             let inputURL: URL
@@ -177,9 +197,11 @@ final class SynthesisViewModel {
                 }
             )
 
+            responseProbe?.mark(.b)
             synthesisResult = result
             saveMelArtifacts(result: result)
             saveTimingArtifact(result: result)
+            responseProbe?.mark(.c)
             status = "合成完了"
             progress = 1.0
             await playOutputAndAwaitCompletion()
@@ -324,6 +346,7 @@ final class SynthesisViewModel {
         guard let result = synthesisResult else { return }
         let baseName = "\(result.precision.rawValue)_\(result.computeLabel)"
         do {
+            responseProbe?.mark(.d)
             try audioPlayer.play(
                 waveform: result.outputWaveform,
                 sampleRate: AudioFeatureExtractor.sampleRate,
