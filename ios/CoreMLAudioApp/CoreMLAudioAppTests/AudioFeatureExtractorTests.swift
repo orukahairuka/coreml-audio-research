@@ -174,4 +174,14 @@ struct AudioFeatureExtractorTests {
         #expect(abs(maxBin - expectedBin) <= 1,
                 "1000Hz のピークが bin \(expectedBin) 付近に来るはず、実際は bin \(maxBin)")
     }
+
+    /// 振幅 1 の正弦波がビンの中心にあるとき、librosa.stft の |X[k]| は Σw[n] / 2 = 256 になる
+    @Test func stftMagnitudeMatchesLibrosaScale() {
+        let bin = 32
+        let signal = (0..<4096).map({ sin(2 * Float.pi * Float(bin) * Float($0) / 1024) })
+        let (magnitudes, frameCount) = AudioFeatureExtractor.stft(signal)
+        let binCount = AudioFeatureExtractor.nFFT / 2 + 1
+        let value = magnitudes[(frameCount / 2) * binCount + bin]
+        #expect(abs(value - 256) < 0.01, "実際は \(value)")
+    }
 }

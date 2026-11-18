@@ -156,9 +156,10 @@ struct AudioFeatureExtractor {
         let halfFFT = fftSize / 2    // FFT の半分（512）
         let binCount = halfFFT + 1   // 周波数ビンの数（513）。FFT 結果は対称なので半分+1 で十分
 
-        // Hann 窓: 切り出し区間の端を滑らかにゼロに落とし、ブツ切れによるノイズを防ぐ
+        // Hann 窓: 切り出し区間の端を滑らかにゼロに落とし、ブツ切れによるノイズを防ぐ。
+        // librosa の窓（最大値 1 の周期 Hann 窓）と同じにするため DENORM を使う（NORM は 1.633 倍になる）
         var window = [Float](repeating: 0, count: fftSize)
-        vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_NORM))
+        vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_DENORM))
 
         // 信号が FFT サイズより短い場合、末尾をゼロで埋める
         let padded = signal + [Float](repeating: 0, count: max(0, fftSize - signal.count))
@@ -200,17 +201,18 @@ struct AudioFeatureExtractor {
                         // FFT 実行
                         vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
 
-                        // magnitude（振幅）計算
+                        // magnitude（振幅）計算。librosa.stft と同じ |X[k]| にする。
+                        // vDSP_fft_zrip の出力は DFT の 2 倍なので、すべてのビンを 2 で割る
                         let offset = frame * binCount
                         // DC 成分（0Hz、信号の平均値に相当）
-                        magnitudes[offset] = abs(splitComplex.realp[0]) / Float(fftSize)
+                        magnitudes[offset] = abs(splitComplex.realp[0]) / 2.0
                         // Nyquist 成分（サンプルレートの半分の周波数）
-                        magnitudes[offset + halfFFT] = abs(splitComplex.imagp[0]) / Float(fftSize)
-                        // その他の周波数。2.0 は実数信号の対称性による補正係数
+                        magnitudes[offset + halfFFT] = abs(splitComplex.imagp[0]) / 2.0
+                        // その他の周波数
                         for i in 1..<halfFFT {
                             let re = splitComplex.realp[i]
                             let im = splitComplex.imagp[i]
-                            magnitudes[offset + i] = sqrt(re * re + im * im) * 2.0 / Float(fftSize)
+                            magnitudes[offset + i] = sqrt(re * re + im * im) / 2.0
                         }
                     }
                 }
