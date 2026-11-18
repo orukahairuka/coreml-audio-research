@@ -19,7 +19,9 @@ struct SynthesisOptimizations: OptionSet, Sendable {
     static let reuseDecoderPos = SynthesisOptimizations(rawValue: 1 << 5)
     /// 固定長のとき Decoder の入力の配列を再利用する
     static let reuseDecoderInput = SynthesisOptimizations(rawValue: 1 << 6)
-    /// モデルの呼び出しに同期版の `prediction(from:)` を使う
+    /// モデルの呼び出しに同期版の `prediction(from:)` を使う。
+    /// 呼び出しは短くなるが、このアプリの合成処理はメインアクターで動くので、呼び出しの間は画面の更新が止まる。
+    /// そのため `adopted` には含めない（計測での比較用）
     static let syncPrediction = SynthesisOptimizations(rawValue: 1 << 7)
 
     /// 計測モードの指定とファイルに書く名前（適用を試す順）
@@ -34,8 +36,11 @@ struct SynthesisOptimizations: OptionSet, Sendable {
         ("syncPrediction", .syncPrediction),
     ]
 
-    /// 通常の合成で使う組み合わせ
-    static let adopted: SynthesisOptimizations = []
+    /// 通常の合成で使う組み合わせ（実機の前後比較で採用したもの）
+    static let adopted: SynthesisOptimizations = [
+        .vocoderTranspose, .decoderFrameRead, .sparseMelFilterbank, .vocoderOutputRead,
+        .encoderInputCopy, .reuseDecoderPos, .reuseDecoderInput,
+    ]
 
     /// `none` またはカンマ区切りの名前を読む。知らない名前があれば nil
     static func parse(_ text: String) -> SynthesisOptimizations? {

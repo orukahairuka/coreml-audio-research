@@ -2,7 +2,7 @@
 """高速化の各段階の前後比較を集計する。
 
 同じ入力・同じ回の A と B の差（B - A）を対にして、中央値と 95% ブートストラップ信頼区間を求める。
-採否の基準:
+時間と出力の基準（最終的な採否は、これに加えて画面の応答などへの影響も考えて決める）:
   1. A と B で、入力メル・Decoder の出力・HiFi-GAN の出力・波形の SHA-256 がすべて一致する
   2. モデルの呼び出し以外の時間の差の信頼区間の上限が 0 未満である（確かに短くなった）
   3. 合成処理時間の差の中央値が 0 未満である（モデルの呼び出しの増加で短縮が打ち消されていない）
@@ -40,7 +40,7 @@ def analyze(directory: Path) -> dict:
     rows = list(csv.DictReader(open(path, newline="")))
     pairs: dict = defaultdict(dict)
     for row in rows:
-        pairs[(row["input_name"], row["round"])][row["variant"]] = row
+        pairs[(row["precision"], row["compute_units"], row["input_name"], row["round"])][row["variant"]] = row
     complete = [p for p in pairs.values() if len(p) == 2 and all(r["status"] == "success" for r in p.values())]
     hash_ok = all(p["A"][k] == p["B"][k] for p in complete for k in HASHES)
     hash_kinds = {name: len({r["deemph_wave_sha256"] for r in rows if r["input_name"] == name and r["status"] == "success"})
@@ -61,7 +61,13 @@ def analyze(directory: Path) -> dict:
         faster = result["e2e"]["delta_ci95_ms"][1] < 0
     else:
         faster = result["non_predict"]["delta_ci95_ms"][1] < 0 and result["e2e"]["delta_median_ms"] < 0
-    result["adopt"] = bool(hash_ok and result["failed_runs"] == 0 and faster)
+    result["meets_criteria"] = bool(hash_ok and result["failed_runs"] == 0 and faster)
+    conditions: dict = defaultdict(lambda: {"pairs": 0, "identical": 0})
+    for p in complete:
+        entry = conditions[f"{p['A']['precision']}:{p['A']['compute_units']}"]
+        entry["pairs"] += 1
+        entry["identical"] += int(all(p["A"][k] == p["B"][k] for k in HASHES))
+    result["by_condition"] = dict(conditions)
     return result
 
 
@@ -75,7 +81,10 @@ def main() -> int:
         e, p, n = r["e2e"], r["predict"], r["non_predict"]
         fmt = lambda m: f"{m['delta_median_ms']:+8.2f} [{m['delta_ci95_ms'][0]:+7.2f},{m['delta_ci95_ms'][1]:+7.2f}]"
         print(f"{r['step']:24s} n={r['pairs']:2d} 出力一致={r['outputs_identical']} 熱={','.join(r['thermal'])} "
-              f"E2E {e['a_median_ms']:7.1f}→{e['b_median_ms']:7.1f} 差{fmt(e)} 推論差{fmt(p)} 推論外差{fmt(n)} 採用={r['adopt']}")
+              f"E2E {e['a_median_ms']:7.1f}→{e['b_median_ms']:7.1f} 差{fmt(e)} 推論差{fmt(p)} 推論外差{fmt(n)} 基準={r['meets_criteria']}")
+        if len(r["by_condition"]) > 1:
+            for name, entry in sorted(r["by_condition"].items()):
+                print(f"    {name:42s} 出力が一致した対 {entry['identical']}/{entry['pairs']}")
     return 0
 
 

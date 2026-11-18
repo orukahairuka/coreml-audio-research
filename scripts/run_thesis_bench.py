@@ -57,7 +57,8 @@ ALL_CONDITIONS = [(p, cu, None) for cu in COMPUTE_UNITS for p in PRECISIONS]
 # ch4-v2: 混合 Compute Units・処理別計測を追加 / ch4-v3: Decoder のステップごとの統計を既定で取らない
 # ch4-v4: Decoder 入力をまとめてコピーする（--decoder-input-write element で従来の方法）
 # ch4-v5: 前処理を公開実装に合わせた。preprocess モードを追加
-BENCH_VERSION = "ch4-v5"
+# ch4-v6: 合成処理の高速化を既定で有効にした。optab モードを追加
+BENCH_VERSION = "ch4-v6"
 
 
 def cu_label(cu: str, hifi_cu: str | None) -> str:

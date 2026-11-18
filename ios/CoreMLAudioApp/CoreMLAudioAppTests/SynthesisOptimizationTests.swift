@@ -60,6 +60,12 @@ struct SynthesisOptimizationTests {
         #expect(dense.mel.map({ $0.bitPattern }) == sparse.mel.map({ $0.bitPattern }))
     }
 
+    /// 同期版の呼び出しはメインアクターを止めるので、通常の合成では使わない
+    @Test func adoptedExcludesSynchronousPrediction() {
+        #expect(!SynthesisOptimizations.adopted.contains(.syncPrediction))
+        #expect(SynthesisOptimizations.adopted.label.split(separator: "+").count == 7)
+    }
+
     @Test func parseAcceptsKnownNamesAndRejectsUnknown() {
         #expect(SynthesisOptimizations.parse("none") == [])
         #expect(SynthesisOptimizations.parse("vocoderTranspose,reuseDecoderPos") == [.vocoderTranspose, .reuseDecoderPos])
