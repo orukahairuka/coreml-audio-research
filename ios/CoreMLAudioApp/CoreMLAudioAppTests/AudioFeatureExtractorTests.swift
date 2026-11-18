@@ -1,8 +1,67 @@
 import Testing
 @testable import CoreMLAudioApp
+import AVFoundation
 import Foundation
 
 struct AudioFeatureExtractorTests {
+
+    // MARK: - リサンプリング
+
+    @Test func resamplingMethodDependsOnSourceRate() {
+        #expect(AudioFeatureExtractor.resamplingMethod(forSourceRate: 22050) == .none)
+        #expect(AudioFeatureExtractor.resamplingMethod(forSourceRate: 44100) == .soxrHQDecimator)
+        #expect(AudioFeatureExtractor.resamplingMethod(forSourceRate: 48000) == .audioConverter)
+        #expect(AudioFeatureExtractor.resamplingMethod(forSourceRate: 16000) == .audioConverter)
+    }
+
+    /// 22.05 kHz の入力はリサンプリングせず、値をそのまま返す
+    @Test func resampleKeepsTargetRateInputUnchanged() throws {
+        let samples: [Float] = (0..<2048).map({ sin(Float($0) * 0.01) })
+        #expect(try AudioFeatureExtractor.resample(samples, sourceRate: 22050) == samples)
+    }
+
+    /// 出力の長さは librosa.resample と同じ ceil(N / 2)
+    @Test(arguments: [(1, 1), (2, 1), (3, 2), (67878, 33939), (135878, 67939)] as [(Int, Int)])
+    func decimatorOutputLength(inputCount: Int, outputCount: Int) {
+        #expect(SoxrHQDecimator.decimate([Float](repeating: 0, count: inputCount)).count == outputCount)
+    }
+
+    /// 通過域の 1 kHz は振幅を保ち、22.05 kHz のナイキスト周波数を超える 15 kHz は除去する
+    @Test func decimatorPassesLowAndRejectsHighFrequency() {
+        func outputPeak(hz: Float) -> Float {
+            let input = (0..<44100).map({ sin(2 * Float.pi * hz * Float($0) / 44100) })
+            let output = SoxrHQDecimator.decimate(input)
+            return output[5000..<17000].map({ abs($0) }).max() ?? 0
+        }
+        #expect(abs(outputPeak(hz: 1000) - 1) < 1e-3)
+        #expect(outputPeak(hz: 15000) < 1e-4)
+    }
+
+    /// 係数は生成スクリプトが記録した SHA-256 と一致する（手で書き換えられていない）
+    @Test func decimatorCoefficientsMatchRecordedHash() {
+        #expect(ThesisRecorder.sha256(SoxrHQDecimatorCoefficients.coefficients) == SoxrHQDecimatorCoefficients.sha256)
+    }
+
+    /// 複数チャンネルの入力は librosa.to_mono と同じく平均する
+    @Test func readMonoSourceAveragesChannels() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("stereo_\(UUID().uuidString).caf")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: 22050, channels: 2))
+        let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 4))
+        buffer.frameLength = 4
+        let channels = try #require(buffer.floatChannelData)
+        for (i, value) in ([0.5, -0.5, 0.25, 0] as [Float]).enumerated() {
+            channels[0][i] = value
+            channels[1][i] = 0.25
+        }
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: format.settings)
+            try file.write(from: buffer)
+        }
+        let source = try AudioFeatureExtractor.readMonoSource(from: url)
+        #expect(source.sampleRate == 22050)
+        #expect(source.samples == [0.375, -0.125, 0.25, 0.125])
+    }
 
     // MARK: - Hz ↔ Mel ラウンドトリップ
 

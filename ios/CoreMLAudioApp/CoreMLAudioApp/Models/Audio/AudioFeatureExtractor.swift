@@ -44,48 +44,99 @@ struct AudioFeatureExtractor {
 
     // MARK: - Audio Loading
 
-    static func loadAudio(from url: URL) throws -> [Float] {
-        let file = try AVAudioFile(forReading: url)
-        guard let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false) else {
-            throw FeatureExtractionError.invalidFormat
-        }
-        let originalFormat = file.processingFormat
+    /// 入力のサンプリング周波数ごとのリサンプリングの方法
+    enum ResamplingMethod: String {
+        /// 22.05 kHz の入力はそのまま使う
+        case none
+        /// 44.1 kHz の入力は soxr_hq を再現した FIR を使う（公開実装と一致する）
+        case soxrHQDecimator
+        /// それ以外の周波数は AVAudioConverter を使う（公開実装とは一致しない）
+        case audioConverter
+    }
 
-        let frameCount = AVAudioFrameCount(file.length)
-        guard let originalBuffer = AVAudioPCMBuffer(pcmFormat: originalFormat, frameCapacity: frameCount) else {
+    static func resamplingMethod(forSourceRate rate: Double) -> ResamplingMethod {
+        if rate == sampleRate { return .none }
+        if rate == SoxrHQDecimator.sourceRate { return .soxrHQDecimator }
+        return .audioConverter
+    }
+
+    /// 音声ファイルを 22050 Hz・モノラルの波形として読み込む
+    static func loadAudio(from url: URL) throws -> [Float] {
+        let source = try readMonoSource(from: url)
+        return try resample(source.samples, sourceRate: source.sampleRate)
+    }
+
+    /// 音声ファイルを元のサンプリング周波数のまま読み込み、モノラルにする
+    /// （複数チャンネルは librosa.to_mono と同じく平均する）
+    static func readMonoSource(from url: URL) throws -> (samples: [Float], sampleRate: Double) {
+        let file = try AVAudioFile(forReading: url)
+        let format = file.processingFormat
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(file.length)) else {
             throw FeatureExtractionError.bufferCreationFailed
         }
-        try file.read(into: originalBuffer)
-
-        // リサンプリング不要の場合
-        if originalFormat.sampleRate == sampleRate && originalFormat.channelCount == 1 {
-            guard let channelData = originalBuffer.floatChannelData?[0] else {
-                throw FeatureExtractionError.bufferCreationFailed
-            }
-            return Array(UnsafeBufferPointer(start: channelData, count: Int(originalBuffer.frameLength)))
+        try file.read(into: buffer)
+        guard let channels = buffer.floatChannelData else {
+            throw FeatureExtractionError.bufferCreationFailed
         }
+        let frameCount = Int(buffer.frameLength)
+        let channelCount = Int(format.channelCount)
+        if channelCount == 1 {
+            return (Array(UnsafeBufferPointer(start: channels[0], count: frameCount)), format.sampleRate)
+        }
+        var mono = [Float](repeating: 0, count: frameCount)
+        for channel in 0..<channelCount {
+            for i in 0..<frameCount {
+                mono[i] += channels[channel][i]
+            }
+        }
+        let divisor = Float(channelCount)
+        for i in 0..<frameCount {
+            mono[i] /= divisor
+        }
+        return (mono, format.sampleRate)
+    }
 
-        // リサンプリング
-        guard let converter = AVAudioConverter(from: originalFormat, to: format) else {
+    /// モノラルの波形を 22050 Hz に変換する
+    static func resample(_ samples: [Float], sourceRate: Double) throws -> [Float] {
+        switch resamplingMethod(forSourceRate: sourceRate) {
+        case .none: return samples
+        case .soxrHQDecimator: return SoxrHQDecimator.decimate(samples)
+        case .audioConverter: return try convertWithAudioConverter(samples, sourceRate: sourceRate)
+        }
+    }
+
+    private static func convertWithAudioConverter(_ samples: [Float], sourceRate: Double) throws -> [Float] {
+        guard !samples.isEmpty else { return [] }
+        guard let sourceFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sourceRate, channels: 1, interleaved: false),
+              let targetFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: 1, interleaved: false),
+              let converter = AVAudioConverter(from: sourceFormat, to: targetFormat) else {
             throw FeatureExtractionError.invalidFormat
         }
-        let ratio = sampleRate / originalFormat.sampleRate
-        let outputFrameCount = AVAudioFrameCount(Double(frameCount) * ratio)
-        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: outputFrameCount) else {
+        let frameCount = AVAudioFrameCount(samples.count)
+        guard let sourceBuffer = AVAudioPCMBuffer(pcmFormat: sourceFormat, frameCapacity: frameCount),
+              let sourceChannel = sourceBuffer.floatChannelData?[0] else {
+            throw FeatureExtractionError.bufferCreationFailed
+        }
+        sourceBuffer.frameLength = frameCount
+        samples.withUnsafeBufferPointer({ pointer in
+            sourceChannel.update(from: pointer.baseAddress!, count: samples.count)
+        })
+        let outputFrameCount = AVAudioFrameCount(Double(frameCount) * sampleRate / sourceRate)
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCount) else {
             throw FeatureExtractionError.bufferCreationFailed
         }
 
         var error: NSError?
         var hasData = true
-        converter.convert(to: outputBuffer, error: &error) { _, outStatus in
+        converter.convert(to: outputBuffer, error: &error, withInputFrom: { _, outStatus in
             if hasData {
                 hasData = false
                 outStatus.pointee = .haveData
-                return originalBuffer
+                return sourceBuffer
             }
             outStatus.pointee = .endOfStream
             return nil
-        }
+        })
         if let error { throw error }
 
         guard let channelData = outputBuffer.floatChannelData?[0] else {
