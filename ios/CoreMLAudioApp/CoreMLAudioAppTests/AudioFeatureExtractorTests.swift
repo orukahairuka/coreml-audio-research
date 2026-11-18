@@ -154,7 +154,7 @@ struct AudioFeatureExtractorTests {
 
         let result = AudioFeatureExtractor.preprocess(samples)
 
-        let fadeOutSamples = Int(Float(result.count) * AudioFeatureExtractor.fadeOutRatio)
+        let fadeOutSamples = Int(Double(result.count) * AudioFeatureExtractor.fadeOutRatio)
         let fadeStart = result.count - fadeOutSamples
 
         // フェードアウト開始直前は元の振幅のまま
@@ -165,6 +165,17 @@ struct AudioFeatureExtractorTests {
         let mid = fadeStart + fadeOutSamples / 2
         #expect(result[mid] < 0.5)
         #expect(result[mid] > 0)
+    }
+
+    /// np.linspace(1.0, 0.0, n) と同じく、フェードの先頭の係数は 1、末尾の係数は 0
+    @Test func preprocessFadeOutMatchesLinspace() {
+        let samples = [Float](repeating: 0.5, count: 1000)
+        let result = AudioFeatureExtractor.preprocess(samples)
+        // 末尾 150 サンプルがフェードの区間
+        #expect(result[849] == 0.5)
+        #expect(result[850] == 0.5)
+        #expect(result[999] == 0)
+        #expect(abs(result[851] - 0.5 * Float(1.0 - 1.0 / 149.0)) < 1e-6)
     }
 
     // MARK: - STFT: 正弦波の周波数ピーク検出

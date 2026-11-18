@@ -22,7 +22,7 @@ struct AudioFeatureExtractor {
     /// オンセット検出時にエネルギーを測る窓の幅（サンプル数）
     static let onsetWindowLength = 1024
     /// フェードアウトする割合。末尾 15% の区間で音量を下げる
-    static let fadeOutRatio: Float = 0.15
+    static let fadeOutRatio: Double = 0.15
 
     /// wav ファイルからメルスペクトログラムを抽出する
     /// - Returns: (mel: [T, nMels], frameCount: Int)
@@ -123,13 +123,14 @@ struct AudioFeatureExtractor {
 
         var trimmed = Array(y[onsetIndex...])
 
-        // fade out
-        let fadeOutSamples = Int(Float(trimmed.count) * fadeOutRatio)
+        // fade out（np.linspace(1.0, 0.0, n) を掛ける。公開実装と同じく倍精度で計算する）
+        let fadeOutSamples = Int(Double(trimmed.count) * fadeOutRatio)
         if fadeOutSamples > 0 {
             let fadeStart = trimmed.count - fadeOutSamples
+            let step = fadeOutSamples > 1 ? -1.0 / Double(fadeOutSamples - 1) : 0.0
             for i in 0..<fadeOutSamples {
-                let factor = 1.0 - Float(i) / Float(fadeOutSamples)
-                trimmed[fadeStart + i] *= factor
+                let factor = i == fadeOutSamples - 1 && fadeOutSamples > 1 ? 0.0 : 1.0 + Double(i) * step
+                trimmed[fadeStart + i] = Float(Double(trimmed[fadeStart + i]) * factor)
             }
         }
 
