@@ -94,11 +94,17 @@ final class DecoderRunner {
             reusablePos = array
         }
 
+        // 固定長のとき、入力の配列は 1 つを使い回せる（生成済みのフレームは増えるだけで、残りは 0 のまま）
+        var reusableInput: MLMultiArray?
+        if let fixedLength, optimizations.contains(.reuseDecoderInput) {
+            reusableInput = try ModelInputArray.zeros(shape: [1, fixedLength, nMels], dataType: .float32)
+        }
+
         for step in 0..<effectiveFrameCount {
             // decoder_input: [1, currentLength, 256]
             let inputLength = fixedLength ?? currentLength
             // 固定長では先頭 currentLength フレームだけ書き込むので、残り（未生成の部分）は 0 で埋めておく
-            let decInput = try ModelInputArray.zeros(shape: [1, inputLength, nMels], dataType: .float32)
+            let decInput = try reusableInput ?? ModelInputArray.zeros(shape: [1, inputLength, nMels], dataType: .float32)
             profiler?.lap(ProfileStage.decInputAlloc)
             try Self.writeInput(decoderInputData, count: currentLength * nMels, into: decInput, method: inputWrite)
             profiler?.lap(ProfileStage.decInputFill)
