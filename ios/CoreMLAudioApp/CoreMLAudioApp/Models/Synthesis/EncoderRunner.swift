@@ -77,7 +77,9 @@ final class EncoderRunner {
         ])
         profiler?.lap(ProfileStage.encFeatureProvider)
         let t0 = CFAbsoluteTimeGetCurrent()
-        let output = try await model.prediction(from: input)
+        let output = optimizations.contains(.syncPrediction)
+            ? try model.predictSynchronously(from: input)
+            : try await model.prediction(from: input)
         let predictMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
         profiler?.lap(ProfileStage.encPredict)
 

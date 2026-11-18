@@ -137,7 +137,9 @@ final class DecoderRunner {
             ])
             profiler?.lap(ProfileStage.decFeatureProvider)
             let t0 = CFAbsoluteTimeGetCurrent()
-            let output = try await model.prediction(from: input)
+            let output = optimizations.contains(.syncPrediction)
+                ? try model.predictSynchronously(from: input)
+                : try await model.prediction(from: input)
             let stepMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
             totalPredictMs += stepMs
             stepPredictMs.append(stepMs)

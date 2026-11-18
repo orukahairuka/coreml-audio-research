@@ -96,7 +96,9 @@ final class VocoderRunner {
         ])
         profiler?.lap(ProfileStage.vocFeatureProvider)
         let t0 = CFAbsoluteTimeGetCurrent()
-        let output = try await model.prediction(from: inputProvider)
+        let output = optimizations.contains(.syncPrediction)
+            ? try model.predictSynchronously(from: inputProvider)
+            : try await model.prediction(from: inputProvider)
         let predictMs = (CFAbsoluteTimeGetCurrent() - t0) * 1000
         profiler?.lap(ProfileStage.vocPredict)
 
