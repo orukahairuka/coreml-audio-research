@@ -49,6 +49,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-11-18 | [thesis-revision-proposal](2026-11-18/thesis-revision-proposal.md) | 卒論第3〜5章の修正案（固定長モデル）。研究の軸を「iPhone上で使える構成と推論時間・E2E時間」に置き直し、第4章を 4-1 評価方法／4-2 移植の同等性／4-3 実行構成の評価／4-4 推論性能／4-5 E2E の分析と改善／4-6 考察と限界 に組み替える案。計測の版（最適化前・最適化1・最適化2）の扱い、条件A〜Dと最適化前後の表、第5章の全文案つき。論文への反映は未実施 |
 | 2026-11-18 | [response-time-measurement](2026-11-18/response-time-measurement.md) | 通常操作（画面の「合成」）の応答時間の計測。計測点 A〜G を runSynthesis・AudioPlayer.play に入れ、CMLA_RESPONSE_BENCH=1 で通常の画面のまま条件 C を 4 入力×(ウォームアップ1＋本計測3) 測る。iPhone 17 Pro は再生開始 API の呼び出しまで 0.69〜1.10 s（全入力で合成音より短い）、波形はパイプラインと一致。iPhone 13 は未計測 |
 | 2026-11-18 | [preprocessing-parity](2026-11-18/preprocessing-parity.md) | Swift の前処理を公開実装の get_spectrograms に一致させた記録。STFT の尺度・窓・フィルタの正規化・メル尺度・フレーム位置・リサンプリング・フェードを修正し、iPhone 13 と iPhone 17 Pro の 4 入力で最大絶対誤差 1.9×10⁻⁵ 以下。soxr_hq を再現する FIR は 381 タップで十分。T′ は入力3・4 で 4 フレーム増える |
+| 2026-11-18 | [e2e-bottleneck-analysis](2026-11-18/e2e-bottleneck-analysis.md) | 前処理の修正後の合成処理時間の内訳（条件 C、T′=262）。iPhone 13 は 2,116 ms、iPhone 17 Pro は 856 ms で、Decoder の繰り返し推論が約 81%。モデルの呼び出し以外の改善候補は合計 274 ms／92 ms。iPhone 13 は読み込みから約 10 秒で Decoder の呼び出しが 5.7 ms から 6.5 ms に長くなる |
 
 ## トピック別
 
@@ -105,6 +106,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [thesis-revision-proposal](2026-11-18/thesis-revision-proposal.md)
 - [response-time-measurement](2026-11-18/response-time-measurement.md)
 - [preprocessing-parity](2026-11-18/preprocessing-parity.md)
+- [e2e-bottleneck-analysis](2026-11-18/e2e-bottleneck-analysis.md)
 
 ### ブランチ・PR まとめ
 
