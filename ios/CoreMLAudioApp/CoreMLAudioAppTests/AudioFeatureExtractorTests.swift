@@ -6,19 +6,48 @@ struct AudioFeatureExtractorTests {
 
     // MARK: - Hz ↔ Mel ラウンドトリップ
 
-    @Test(arguments: [0.0, 440.0, 1000.0, 8000.0, 11025.0] as [Float])
-    func hzToMelRoundTrip(hz: Float) {
+    @Test(arguments: [0.0, 440.0, 1000.0, 8000.0, 11025.0] as [Double])
+    func hzToMelRoundTrip(hz: Double) {
         let mel = AudioFeatureExtractor.hzToMel(hz)
         let recovered = AudioFeatureExtractor.melToHz(mel)
-        #expect(abs(recovered - hz) < 0.01, "Hz→Mel→Hz が元に戻らない: \(hz) → \(recovered)")
+        #expect(abs(recovered - hz) < 1e-6, "Hz→Mel→Hz が元に戻らない: \(hz) → \(recovered)")
     }
 
     @Test func hzToMelKnownValues() {
-        // 0 Hz → 0 mel
+        // Slaney 尺度: 1000 Hz で 15、6400 Hz で 15 + 27
         #expect(AudioFeatureExtractor.hzToMel(0) == 0)
-        // 1000 Hz ≈ 1000 mel (O'Shaughnessy 式の特性)
-        let mel1000 = AudioFeatureExtractor.hzToMel(1000)
-        #expect(abs(mel1000 - 999.985) < 0.1)
+        #expect(abs(AudioFeatureExtractor.hzToMel(1000) - 15) < 1e-9)
+        #expect(abs(AudioFeatureExtractor.hzToMel(6400) - 42) < 1e-9)
+    }
+
+    // MARK: - メルフィルタバンク
+
+    /// librosa.filters.mel(sr=22050, n_fft=1024, n_mels=256) の値（librosa 0.11.0）
+    @Test(arguments: [
+        (0, 1, 0.026015037670731544, 0.026015037670731544),
+        (64, 39, 0.06674706935882568, 0.06674706935882568),
+        (128, 93, 0.0282394140958786, 0.044648677110672),
+        (255, 505, 0.00666936906054616, 0.046399421989917755),
+    ] as [(Int, Int, Double, Double)])
+    func melFilterbankMatchesLibrosa(band: Int, peakBin: Int, peak: Double, sum: Double) {
+        let binCount = AudioFeatureExtractor.nFFT / 2 + 1
+        let filterbank = AudioFeatureExtractor.createMelFilterbank(
+            sampleRate: 22050, nFFT: 1024, nMels: 256, fMin: 0, fMax: 11025
+        )
+        let row = Array(filterbank[(band * binCount)..<((band + 1) * binCount)])
+        #expect(abs(Double(row[peakBin]) - peak) < 1e-7)
+        #expect(abs(Double(row.reduce(0, +)) - sum) < 1e-6)
+    }
+
+    /// librosa と同じく、256 帯域のどのフィルタにも 1 つ以上の FFT ビンが入る
+    @Test func melFilterbankHasNoEmptyBand() {
+        let binCount = AudioFeatureExtractor.nFFT / 2 + 1
+        let filterbank = AudioFeatureExtractor.createMelFilterbank(
+            sampleRate: 22050, nFFT: 1024, nMels: 256, fMin: 0, fMax: 11025
+        )
+        for band in 0..<256 {
+            #expect(filterbank[(band * binCount)..<((band + 1) * binCount)].contains(where: { $0 > 0 }), "帯域 \(band)")
+        }
     }
 
     // MARK: - プリエンファシス ↔ デエンファシス ラウンドトリップ

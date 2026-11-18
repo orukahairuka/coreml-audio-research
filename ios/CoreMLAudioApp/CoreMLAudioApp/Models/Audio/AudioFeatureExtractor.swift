@@ -257,14 +257,17 @@ struct AudioFeatureExtractor {
         return (mel, frameCount)
     }
 
-    /// Hz → メル変換
-    static func hzToMel(_ hz: Float) -> Float {
-        return 2595.0 * log10(1.0 + hz / 700.0)
+    /// Hz → メル変換（Slaney 尺度。librosa.hz_to_mel の htk=False と同じ）
+    /// 1000 Hz までは線形、それより上は対数
+    static func hzToMel(_ hz: Double) -> Double {
+        if hz < 1000.0 { return 3.0 * hz / 200.0 }
+        return 15.0 + 27.0 * log10(hz / 1000.0) / log10(6.4)
     }
 
-    /// メル → Hz 変換
-    static func melToHz(_ mel: Float) -> Float {
-        return 700.0 * (pow(10.0, mel / 2595.0) - 1.0)
+    /// メル → Hz 変換（Slaney 尺度。librosa.mel_to_hz の htk=False と同じ）
+    static func melToHz(_ mel: Double) -> Double {
+        if mel < 15.0 { return 200.0 * mel / 3.0 }
+        return 1000.0 * pow(6.4, (mel - 15.0) / 27.0)
     }
 
     /// デエンファシスフィルタ: y[n] = x[n] + coeff * y[n-1]
@@ -277,50 +280,30 @@ struct AudioFeatureExtractor {
         return result
     }
 
-    /// メルフィルタバンク行列を生成する (librosa.filters.mel 相当)
+    /// メルフィルタバンク行列を生成する（librosa.filters.mel の htk=False, norm="slaney" と同じ）
+    ///
+    /// 帯域 m の三角フィルタの両端を f₋, f₊ とすると、面積が 1 になるよう 2 / (f₊ - f₋) を掛ける
     static func createMelFilterbank(sampleRate: Float, nFFT: Int, nMels: Int, fMin: Float, fMax: Float) -> [Float] {
         let binCount = nFFT / 2 + 1
+        let rate = Double(sampleRate)
+        let melMin = hzToMel(Double(fMin))
+        let melMax = hzToMel(Double(fMax))
 
-        let melMin = hzToMel(fMin)
-        let melMax = hzToMel(fMax)
+        // nMels + 2 個の等間隔メル周波数を Hz にしたもの
+        let edges = (0..<(nMels + 2)).map({ index in
+            melToHz(melMin + Double(index) * (melMax - melMin) / Double(nMels + 1))
+        })
 
-        // nMels + 2 個の等間隔メル周波数
-        var melPoints = [Float](repeating: 0, count: nMels + 2)
-        for i in 0..<(nMels + 2) {
-            melPoints[i] = melMin + Float(i) * (melMax - melMin) / Float(nMels + 1)
-        }
-
-        // メル → Hz → FFT bin
-        let fftFreqs = melPoints.map { melToHz($0) }
-        let bins = fftFreqs.map { $0 * Float(nFFT) / sampleRate }
-
-        // 三角フィルタ
         var filterbank = [Float](repeating: 0, count: nMels * binCount)
         for m in 0..<nMels {
-            let left = bins[m]
-            let center = bins[m + 1]
-            let right = bins[m + 2]
-
+            let (left, center, right) = (edges[m], edges[m + 1], edges[m + 2])
+            let areaNorm = 2.0 / (right - left)
             for k in 0..<binCount {
-                let freq = Float(k)
-                if freq >= left && freq <= center && center > left {
-                    filterbank[m * binCount + k] = (freq - left) / (center - left)
-                } else if freq > center && freq <= right && right > center {
-                    filterbank[m * binCount + k] = (right - freq) / (right - center)
-                }
+                let hz = Double(k) * rate / Double(nFFT)
+                let weight = max(0.0, min((hz - left) / (center - left), (right - hz) / (right - center)))
+                filterbank[m * binCount + k] = Float(weight * areaNorm)
             }
         }
-
-        // Slaney 正規化
-        for m in 0..<nMels {
-            let bandwidth = 2.0 * (Self.melToHz(melPoints[m + 2]) - Self.melToHz(melPoints[m])) / sampleRate
-            if bandwidth > 0 {
-                for k in 0..<binCount {
-                    filterbank[m * binCount + k] /= bandwidth
-                }
-            }
-        }
-
         return filterbank
     }
 
