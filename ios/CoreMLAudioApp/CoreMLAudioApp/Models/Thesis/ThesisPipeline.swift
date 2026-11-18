@@ -149,7 +149,10 @@ final class ThesisPipeline {
 
     /// - Parameter profiler: 処理別計測。渡すと End-to-End の区間を処理ごとに切り分ける。
     ///   起点と終点は End-to-End 時間と同じ時刻にそろえるので、区間の合計は e2eMs と一致する
-    func synthesize(inputURL: URL, profiler: StageProfiler? = nil) async throws -> Measurement {
+    ///   - optimizations: 高速化の指定（結果は変わらない）
+    func synthesize(
+        inputURL: URL, profiler: StageProfiler? = nil, optimizations: SynthesisOptimizations = .adopted
+    ) async throws -> Measurement {
         let nMels = Self.nMels
         let tStart = CFAbsoluteTimeGetCurrent()
         profiler?.start(at: tStart)
@@ -187,7 +190,8 @@ final class ThesisPipeline {
         // 4. HiFi-GAN
         let vocoderRunner = VocoderRunner(model: hifigan, policy: vocoderPolicy)
         let vocoderResult = try await vocoderRunner.run(
-            postnetOut: decoderResult.postnetOut, totalFrames: effectiveFrames, nMels: nMels, profiler: profiler
+            postnetOut: decoderResult.postnetOut, totalFrames: effectiveFrames, nMels: nMels, profiler: profiler,
+            optimizations: optimizations
         )
 
         // 5. デエンファシス

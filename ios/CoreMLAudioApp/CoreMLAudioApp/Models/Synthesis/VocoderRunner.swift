@@ -26,9 +26,13 @@ final class VocoderRunner {
     ///   - totalFrames: T (時間方向のフレーム数)
     ///   - nMels: メルビン数 (256)
     ///   - profiler: 処理別計測（卒論第4章の追加計測用）。nil なら計測しない
+    ///   - optimizations: 高速化の指定（結果は変わらない）
     /// - Returns: 合成波形 (デエンファシス前の生 PCM, 22050 Hz, 長さ = `contentT * hopSize`),
     ///            `predict()` の所要時間 (ms), モデルに渡した実効 T (`inputT`), 入力メルに含まれた NaN/Inf の個数
-    func run(postnetOut: MLMultiArray, totalFrames: Int, nMels: Int, profiler: StageProfiler? = nil) async throws -> (
+    func run(
+        postnetOut: MLMultiArray, totalFrames: Int, nMels: Int, profiler: StageProfiler? = nil,
+        optimizations: SynthesisOptimizations = .adopted
+    ) async throws -> (
         waveform: [Float], predictMs: Double, inputT: Int, inputNonFiniteCount: Int
     ) {
         // policy に応じてモデルへ渡す T (inputT) と「中身のあるフレーム数」(contentT) を決める。
@@ -55,9 +59,21 @@ final class VocoderRunner {
         // 1. 転置 + pad/crop: [1, T, nMels] → [1, nMels, inputT]
         //    MLMultiArray は確保しただけでは中身が不定なので 0 で埋め、contentT より後ろを zero-pad にする (fixed 用)
         let input = try ModelInputArray.zeros(shape: [1, nMels, inputT], dataType: .float32)
-        for t in 0..<contentT {
-            for m in 0..<nMels {
-                input[[0, m as NSNumber, t as NSNumber]] = postnetOut[[0, t as NSNumber, m as NSNumber]]
+        if optimizations.contains(.vocoderTranspose) {
+            let frames = MLMultiArrayReader.rows(postnetOut, rows: 0..<contentT, columns: nMels)
+            input.withUnsafeMutableBytes({ raw, strides in
+                let values = raw.bindMemory(to: Float.self)
+                for t in 0..<contentT {
+                    for m in 0..<nMels {
+                        values[m * strides[1] + t * strides[2]] = frames[t * nMels + m]
+                    }
+                }
+            })
+        } else {
+            for t in 0..<contentT {
+                for m in 0..<nMels {
+                    input[[0, m as NSNumber, t as NSNumber]] = postnetOut[[0, t as NSNumber, m as NSNumber]]
+                }
             }
         }
         profiler?.lap(ProfileStage.vocInputTranspose)
