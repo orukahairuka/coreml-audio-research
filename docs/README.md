@@ -53,6 +53,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 | 2026-11-18 | [e2e-optimization](2026-11-18/e2e-optimization.md) | 合成処理時間の高速化の前後比較。7 つの変更を採用し、条件 C の合成処理時間は iPhone 13 で 1,837→1,587 ms、iPhone 17 Pro で 815→723 ms。12 条件すべてで出力のハッシュは一致。同期版の prediction はメインスレッドを止めるため不採用 |
 | 2026-11-18 | [off-main-inference-experiment](2026-11-18/off-main-inference-experiment.md) | 推論をメインスレッドの外で同期版の API で実行する実験。合成処理時間は iPhone 13 で 209 ms、iPhone 17 Pro で 66 ms 短くなり、メインスレッドの最大の停止は基準と同程度。メインスレッド上の同期呼び出しは最大の停止が 100 ms を超える。採用後は通常の画面操作の経路にも適用し、12 条件で出力の一致を確認。時間の短縮を確かめたのは条件 C のみで、`cpuOnly` では長くなる傾向がある |
 | 2026-11-19 | [final-implementation-remeasurement](2026-11-19/final-implementation-remeasurement.md) | 最終実装での卒論第4章の再計測。12 条件、HiFi-GAN 単体、条件 A〜D、合成処理時間の内訳、応答時間、Transformer の同等性、マスクの効果を計測した結果 |
+| 2026-11-19 | [thesis-v7-update-inventory](2026-11-19/thesis-v7-update-inventory.md) | 再計測に基づく卒業論文 v7 の更新箇所の一覧。結論が変わる箇所、表の新しい値、図、旧結果を使う根拠 |
 
 ## トピック別
 
@@ -113,6 +114,7 @@ CoreML 変換・iOS 実装の研究進捗ドキュメント。日付ディレク
 - [e2e-optimization](2026-11-18/e2e-optimization.md)
 - [off-main-inference-experiment](2026-11-18/off-main-inference-experiment.md)
 - [final-implementation-remeasurement](2026-11-19/final-implementation-remeasurement.md)
+- [thesis-v7-update-inventory](2026-11-19/thesis-v7-update-inventory.md)
 
 ### ブランチ・PR まとめ
 
