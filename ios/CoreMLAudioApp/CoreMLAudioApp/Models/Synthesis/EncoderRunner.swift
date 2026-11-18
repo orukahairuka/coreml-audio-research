@@ -19,8 +19,12 @@ final class EncoderRunner {
     ///   - frameCount: T (時間方向のフレーム数)
     ///   - nMels: メルビン数 (256)
     ///   - profiler: 処理別計測（卒論第4章の追加計測用）。nil なら計測しない
+    ///   - optimizations: 高速化の指定（結果は変わらない）
     /// - Returns: Encoder 出力の memory、`predict()` の所要時間 (ms)、入力メルに含まれた NaN/Inf の個数
-    func run(mel: [Float], frameCount: Int, nMels: Int, profiler: StageProfiler? = nil) async throws -> (
+    func run(
+        mel: [Float], frameCount: Int, nMels: Int, profiler: StageProfiler? = nil,
+        optimizations: SynthesisOptimizations = .adopted
+    ) async throws -> (
         memory: MLMultiArray, predictMs: Double, inputNonFiniteCount: Int
     ) {
         let inputT: Int
@@ -43,8 +47,12 @@ final class EncoderRunner {
         // 入力 mel: [1, T, nMels] の MLMultiArray に値を詰める。
         // 確保しただけでは中身が不定なので 0 で埋めてから、先頭 contentT フレームに書き込む
         let melArray = try ModelInputArray.zeros(shape: [1, inputT, nMels], dataType: .float32)
-        for i in 0..<(contentT * nMels) {
-            melArray[i] = NSNumber(value: mel[i])
+        if optimizations.contains(.encoderInputCopy) {
+            try ModelInputArray.copyFloat32(mel, count: contentT * nMels, into: melArray, name: "Encoder mel")
+        } else {
+            for i in 0..<(contentT * nMels) {
+                melArray[i] = NSNumber(value: mel[i])
+            }
         }
         profiler?.lap(ProfileStage.encInputFill)
         let nonFiniteCount = try ModelInputArray.validateFloat32(

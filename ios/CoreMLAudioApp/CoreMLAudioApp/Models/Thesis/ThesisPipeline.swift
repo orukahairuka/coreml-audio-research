@@ -174,7 +174,7 @@ final class ThesisPipeline {
         // 2. Encoder
         let encoderRunner = EncoderRunner(model: encoder, policy: transformerPolicy)
         let encoderResult = try await encoderRunner.run(
-            mel: mel, frameCount: effectiveFrames, nMels: nMels, profiler: profiler
+            mel: mel, frameCount: effectiveFrames, nMels: nMels, profiler: profiler, optimizations: optimizations
         )
 
         // 3. Decoder
