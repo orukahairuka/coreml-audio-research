@@ -18,10 +18,12 @@ import Foundation
 /// | `CMLA_RESPONSE_STEADY` | 入力ごとの本計測の回数（既定 3） |
 /// | `CMLA_RESPONSE_INPUTS` | 入力の名前をカンマ区切りで（既定は thesis_inputs.json の順 = 入力1〜4） |
 /// | `CMLA_RESPONSE_GAP_MS` | 再生が終わってから次の合成を始めるまでの待ち（既定 1000 ms） |
+/// | `CMLA_RESPONSE_OPTIMIZATIONS` | 高速化の指定（既定は `SynthesisOptimizations.adopted`） |
 struct ResponseBenchConfig {
 
     /// 計測コードの版。CSV の `bench_version` 列に出す
-    static let benchVersion = "resp-v1"
+    /// resp-v2: 高速化の指定、進捗の表示の更新、メインスレッドの停止の列を追加
+    static let benchVersion = "resp-v2"
 
     enum ConfigError: LocalizedError {
         case invalid(String, String)
@@ -41,6 +43,7 @@ struct ResponseBenchConfig {
     let steadyCount: Int
     let inputNames: [String]?
     let gapMs: Int
+    let optimizations: SynthesisOptimizations
 
     static var isRequested: Bool {
         ProcessInfo.processInfo.environment["CMLA_RESPONSE_BENCH"] == "1"
@@ -54,6 +57,13 @@ struct ResponseBenchConfig {
         let settingRaw = env["CMLA_RESPONSE_SETTING"] ?? AppComputeSetting.cpuAndNEHifiganCPU.rawValue
         guard let setting = AppComputeSetting(rawValue: settingRaw) else {
             throw ConfigError.invalid("CMLA_RESPONSE_SETTING", settingRaw)
+        }
+        var optimizations = SynthesisOptimizations.adopted
+        if let raw = env["CMLA_RESPONSE_OPTIMIZATIONS"] {
+            guard let parsed = SynthesisOptimizations.parse(raw) else {
+                throw ConfigError.invalid("CMLA_RESPONSE_OPTIMIZATIONS", raw)
+            }
+            optimizations = parsed
         }
         func intValue(_ key: String, default value: Int) throws -> Int {
             guard let raw = env[key] else { return value }
@@ -70,7 +80,8 @@ struct ResponseBenchConfig {
             inputNames: env["CMLA_RESPONSE_INPUTS"].map({ raw in
                 raw.split(separator: ",").map({ String($0) })
             }),
-            gapMs: try intValue("CMLA_RESPONSE_GAP_MS", default: 1000)
+            gapMs: try intValue("CMLA_RESPONSE_GAP_MS", default: 1000),
+            optimizations: optimizations
         )
     }
 

@@ -35,7 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_thesis_bench import REPO_ROOT, Target, append_csv, now_iso  # noqa: E402
 
-BENCH_VERSION = "resp-v1"  # アプリ側の ResponseBenchConfig.benchVersion と同じ
+BENCH_VERSION = "resp-v2"  # アプリ側の ResponseBenchConfig.benchVersion と同じ
 
 HOST_HEADER = [
     "session_id", "launch_id", "mode", "precision", "compute_setting", "warmup", "steady", "inputs",
@@ -141,6 +141,8 @@ class ResponseBench:
         }
         if self.args.inputs:
             env["CMLA_RESPONSE_INPUTS"] = self.args.inputs
+        if self.args.optimizations:
+            env["CMLA_RESPONSE_OPTIMIZATIONS"] = self.args.optimizations
         print(f"[{now_iso()}] {launch_id} {self.args.precision}:{self.args.setting} (thermal wait {wait:.0f}s, {state})")
         started_at = now_iso()
         status, exit_code, _, elapsed = self.launch(env, launch_id, self.args.timeout,
@@ -174,6 +176,7 @@ def main() -> int:
     p.add_argument("--steady", type=int, default=3)
     p.add_argument("--inputs", help="入力の名前をカンマ区切りで（既定は 1,6,11,2 ＝入力1〜4）")
     p.add_argument("--gap-ms", type=int, default=1000, help="再生終了から次の合成までの待ち")
+    p.add_argument("--optimizations", help="高速化の指定（none またはカンマ区切りの名前。既定はアプリの既定）")
     p.add_argument("--timeout", type=float, default=900)
     p.add_argument("--thermal-ok-states", default="nominal",
                    type=lambda s: [x.strip() for x in s.split(",") if x.strip()])

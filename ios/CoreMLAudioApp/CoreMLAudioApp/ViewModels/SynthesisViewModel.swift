@@ -44,6 +44,9 @@ final class SynthesisViewModel {
     private(set) var synthesisResult: SynthesisResult?
     private var playbackContinuation: CheckedContinuation<Void, Never>?
 
+    /// 合成処理の高速化の指定（応答時間の計測モードで変更前と比べるときだけ変える）
+    var synthesisOptimizations: SynthesisOptimizations = .adopted
+
     /// 通常操作の応答時間の計測点（応答時間の計測モードのときだけ設定する。nil なら何もしない）
     var responseProbe: ResponseTimeProbe? {
         didSet { audioPlayer.responseProbe = responseProbe }
@@ -191,9 +194,11 @@ final class SynthesisViewModel {
                 precision: selectedPrecision,
                 computeUnit: selectedComputeUnit.encoderDecoderUnit,
                 hifiganComputeUnit: selectedComputeUnit.hifiganUnit,
+                optimizations: synthesisOptimizations,
                 onProgress: { [weak self] (statusText: String, progressValue: Double) in
                     self?.status = statusText
                     self?.progress = progressValue
+                    self?.responseProbe?.recordProgress(progressValue)
                 }
             )
 

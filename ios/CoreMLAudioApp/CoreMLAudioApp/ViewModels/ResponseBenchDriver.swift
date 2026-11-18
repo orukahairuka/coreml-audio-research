@@ -22,6 +22,8 @@ enum ResponseBenchDriver {
         "entry_to_A_ms", "A_to_B_ms", "B_to_C_ms", "C_to_D_ms", "A_to_D_ms",
         "D_to_E_ms", "E_to_F_ms", "F_to_G_ms", "A_to_F_ms", "A_to_G_ms", "G_to_end_ms",
         "encoder_ms", "decoder_total_ms", "hifigan_ms", "synth_ms", "rtf", "output_sha256",
+        "optimizations", "progress_updates", "progress_decreases", "progress_max_gap_ms",
+        "main_stall_max_ms", "main_stall_over16_count", "main_stall_over33_count", "main_stall_over16_total_ms",
     ]
 
     /// 計測を最後まで行い、プロセスの終了コードを返す
@@ -44,6 +46,7 @@ enum ResponseBenchDriver {
         viewModel.selectedPrecision = config.precision
         viewModel.selectedComputeUnit = config.setting
         viewModel.selectedShapeMode = ThesisBenchConfig.shapeMode
+        viewModel.synthesisOptimizations = config.optimizations
 
         // モデルを読み込んでおく（計測区間の外）
         let loadStart = DispatchTime.now().uptimeNanoseconds
@@ -139,7 +142,17 @@ enum ResponseBenchDriver {
             "A_to_F_ms": ms(.a, .f),
             "A_to_G_ms": ms(.a, .g),
             "G_to_end_ms": ms(.g, .end),
+            "optimizations": config.optimizations.label,
+            "progress_updates": String(probe.progressUpdates),
+            "progress_decreases": String(probe.progressDecreases),
+            "progress_max_gap_ms": String(format: "%.3f", probe.progressMaxGapMs),
         ]
+        if let stall = probe.stall {
+            values["main_stall_max_ms"] = String(format: "%.3f", stall.maxGapMs)
+            values["main_stall_over16_count"] = String(stall.over16Count)
+            values["main_stall_over33_count"] = String(stall.over33Count)
+            values["main_stall_over16_total_ms"] = String(format: "%.3f", stall.over16TotalMs)
+        }
         if let result {
             let audioSec = Double(result.outputWaveform.count) / result.sampleRate
             values["T_prime_app"] = String(result.outputFrameCount)

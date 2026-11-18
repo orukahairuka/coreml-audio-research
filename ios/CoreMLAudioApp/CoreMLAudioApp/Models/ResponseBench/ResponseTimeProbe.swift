@@ -31,13 +31,51 @@ final class ResponseTimeProbe {
     }
 
     private var marks = [UInt64](repeating: 0, count: Point.allCases.count)
+    private var stallProbe: MainThreadStallProbe?
+
+    /// 合成中（A から B まで）のメインスレッドの停止
+    private(set) var stall: MainThreadStallProbe.Summary?
+    /// 合成中に進捗の表示を更新した回数
+    private(set) var progressUpdates = 0
+    /// 進捗の値が前回より小さくなった回数
+    private(set) var progressDecreases = 0
+    /// 進捗の表示の更新の間隔の最大値 (ms)
+    private(set) var progressMaxGapMs = 0.0
+    private var lastProgress = -Double.infinity
+    private var lastProgressTime: UInt64 = 0
 
     func reset() {
         for i in marks.indices { marks[i] = 0 }
+        stall = nil
+        progressUpdates = 0
+        progressDecreases = 0
+        progressMaxGapMs = 0
+        lastProgress = -Double.infinity
+        lastProgressTime = 0
     }
 
     func mark(_ point: Point) {
         marks[point.rawValue] = DispatchTime.now().uptimeNanoseconds
+        if point == .a {
+            let probe = MainThreadStallProbe()
+            probe.start()
+            stallProbe = probe
+        } else if point == .b {
+            stall = stallProbe?.stop()
+            stallProbe = nil
+        }
+    }
+
+    /// 進捗の表示の更新を記録する
+    func recordProgress(_ value: Double) {
+        let now = DispatchTime.now().uptimeNanoseconds
+        if lastProgressTime != 0 {
+            progressMaxGapMs = max(progressMaxGapMs, Double(now - lastProgressTime) / 1_000_000)
+        }
+        if value < lastProgress { progressDecreases += 1 }
+        progressUpdates += 1
+        lastProgress = value
+        lastProgressTime = now
     }
 
     func has(_ point: Point) -> Bool {
