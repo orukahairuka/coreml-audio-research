@@ -9,6 +9,8 @@ final class AudioSynthesizer {
     private var hifigan: MLModel?
     private var loadedPrecision: ModelPrecision?
     private var loadedComputeUnits: MLComputeUnits?
+    /// 読み込み済みの HiFi-GAN の Compute Units（Encoder・Decoder と別に指定できる）
+    private var loadedHifiganComputeUnits: MLComputeUnits?
     private var loadedShapeMode: ShapeModeOption?
     private var loadedEncoderName: String?
     private var loadedDecoderName: String?
@@ -22,8 +24,18 @@ final class AudioSynthesizer {
     ///
     /// - Parameter shapeMode: HiFi-GAN の入力 shape バリアント。本番は `.fixed262` を推奨。
     ///                        shape 付きモデルを優先し、`range1` は legacy 命名にも対応する。
-    func loadModels(precision: ModelPrecision, computeUnits: MLComputeUnits, shapeMode: ShapeModeOption) throws {
+    /// - Parameter computeUnits: Encoder と Decoder（`hifiganComputeUnits` を省略したときは HiFi-GAN も）の Compute Units
+    /// - Parameter hifiganComputeUnits: HiFi-GAN だけ別の Compute Units で読み込むときに指定する。
+    ///                                  省略時は `computeUnits` と同じ（従来の動作）
+    func loadModels(
+        precision: ModelPrecision,
+        computeUnits: MLComputeUnits,
+        hifiganComputeUnits: MLComputeUnits? = nil,
+        shapeMode: ShapeModeOption
+    ) throws {
+        let hifiUnits = hifiganComputeUnits ?? computeUnits
         if loadedPrecision == precision && loadedComputeUnits == computeUnits
+            && loadedHifiganComputeUnits == hifiUnits
             && loadedShapeMode == shapeMode
             && encoder != nil && decoder != nil && hifigan != nil {
             return
@@ -49,15 +61,19 @@ final class AudioSynthesizer {
         let config = MLModelConfiguration()
         config.computeUnits = computeUnits
 
+        let hifiConfig = MLModelConfiguration()
+        hifiConfig.computeUnits = hifiUnits
+
         let enc = try MLModel(contentsOf: encoderURL, configuration: config)
         let dec = try MLModel(contentsOf: decoderURL, configuration: config)
-        let hifi = try MLModel(contentsOf: hifiganURL, configuration: config)
+        let hifi = try MLModel(contentsOf: hifiganURL, configuration: hifiConfig)
 
         encoder = enc
         decoder = dec
         hifigan = hifi
         loadedPrecision = precision
         loadedComputeUnits = computeUnits
+        loadedHifiganComputeUnits = hifiUnits
         loadedShapeMode = shapeMode
         loadedEncoderName = encoderName
         loadedDecoderName = decoderName
@@ -86,6 +102,7 @@ final class AudioSynthesizer {
         let hifi = try MLModel(contentsOf: hifiganURL, configuration: config)
 
         hifigan = hifi
+        loadedHifiganComputeUnits = computeUnits
         loadedHifiganName = hifiganName
         loadedHifiganShapeLabel = shapeMode.resolvedShapeLabel(for: hifiganName, precision: precision)
         loadedHifiganPolicy = shapeMode.inputPolicy
@@ -97,6 +114,7 @@ final class AudioSynthesizer {
         inputURL: URL,
         precision: ModelPrecision,
         computeUnit: ComputeUnitOption,
+        hifiganComputeUnit: ComputeUnitOption? = nil,
         onProgress: @MainActor (String, Double) -> Void
     ) async throws -> SynthesisResult {
         guard let encoder, let decoder, let hifigan else {
@@ -237,7 +255,7 @@ final class AudioSynthesizer {
             loadedHifiganName ?? "?",
             precision.rawValue,
             loadedHifiganShapeLabel ?? "?",
-            computeUnit.rawValue,
+            (hifiganComputeUnit ?? computeUnit).rawValue,
             nMels, hifiganInputT,
             waveform.count,
             hifiganOutputStats.min, hifiganOutputStats.max, hifiganOutputStats.mean, rms,
@@ -291,6 +309,7 @@ final class AudioSynthesizer {
         return SynthesisResult(
             precision: precision,
             computeUnit: computeUnit,
+            hifiganComputeUnit: hifiganComputeUnit ?? computeUnit,
             inputWaveform: inputWaveform,
             outputWaveform: waveform,
             inputMelSpectrogram: inputDisplayMel.mel,

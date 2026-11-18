@@ -13,7 +13,8 @@ final class SynthesisViewModel {
     var progress: Double = 0
     var errorMessage: String?
     var selectedPrecision: ModelPrecision = .float16
-    var selectedComputeUnit: ComputeUnitOption = .cpuAndGPU
+    /// 計算デバイスの設定。3 モデル同じ指定の 4 種類と、HiFi-GAN だけ CPU にする設定（条件 C）から選ぶ
+    var selectedComputeUnit: AppComputeSetting = .cpuAndGPU
     /// HiFi-GAN 入力 shape バリアント。本番デフォルトは `.fixed262` (実機テストで全 computeUnits 安定)。
     /// 他の RangeDim 系は研究用に残してあり、UI から切り替えられる。
     var selectedShapeMode: ShapeModeOption = .fixed262
@@ -143,7 +144,8 @@ final class SynthesisViewModel {
         do {
             try synthesizer.loadModels(
                 precision: selectedPrecision,
-                computeUnits: selectedComputeUnit.mlComputeUnits,
+                computeUnits: selectedComputeUnit.encoderDecoderUnit.mlComputeUnits,
+                hifiganComputeUnits: selectedComputeUnit.hifiganUnit.mlComputeUnits,
                 shapeMode: selectedShapeMode
             )
             status = "モデルロード完了 (\(selectedPrecision.rawValue), \(selectedShapeMode.displayName), \(selectedComputeUnit.displayName))"
@@ -167,7 +169,8 @@ final class SynthesisViewModel {
             let result = try await synthesizer.synthesize(
                 inputURL: inputURL,
                 precision: selectedPrecision,
-                computeUnit: selectedComputeUnit,
+                computeUnit: selectedComputeUnit.encoderDecoderUnit,
+                hifiganComputeUnit: selectedComputeUnit.hifiganUnit,
                 onProgress: { [weak self] (statusText: String, progressValue: Double) in
                     self?.status = statusText
                     self?.progress = progressValue
@@ -200,7 +203,7 @@ final class SynthesisViewModel {
         }
 
         // 出力メル: 精度・デバイスでファイル名を分ける
-        let baseName = "output_mel_\(result.precision.rawValue)_\(result.computeUnit.rawValue)"
+        let baseName = "output_mel_\(result.precision.rawValue)_\(result.computeLabel)"
         do {
             try MelArtifactWriter.write(
                 melData: result.outputMelSpectrogram,
@@ -218,7 +221,7 @@ final class SynthesisViewModel {
             try TimingJsonWriter.write(
                 timing: result.timing,
                 precision: result.precision,
-                computeUnit: result.computeUnit
+                computeUnitLabel: result.computeLabel
             )
         } catch {
             print("[TimingJsonWriter] 保存失敗: \(error.localizedDescription)")
@@ -304,7 +307,7 @@ final class SynthesisViewModel {
 
     func playOutput() {
         guard let result = synthesisResult else { return }
-        let baseName = "\(result.precision.rawValue)_\(result.computeUnit.rawValue)"
+        let baseName = "\(result.precision.rawValue)_\(result.computeLabel)"
         do {
             try audioPlayer.play(
                 waveform: result.outputWaveform,
@@ -319,7 +322,7 @@ final class SynthesisViewModel {
 
     private func playOutputAndAwaitCompletion() async {
         guard let result = synthesisResult else { return }
-        let baseName = "\(result.precision.rawValue)_\(result.computeUnit.rawValue)"
+        let baseName = "\(result.precision.rawValue)_\(result.computeLabel)"
         do {
             try audioPlayer.play(
                 waveform: result.outputWaveform,

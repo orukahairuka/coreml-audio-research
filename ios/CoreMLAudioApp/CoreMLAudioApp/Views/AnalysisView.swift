@@ -12,7 +12,7 @@ struct AnalysisView: View {
                     HStack {
                         Label(result.precision.rawValue, systemImage: "number")
                         Spacer()
-                        Label(result.computeUnit.displayName, systemImage: "cpu")
+                        Label(result.computeDisplayName, systemImage: "cpu")
                     }
                     .font(.headline)
                 }

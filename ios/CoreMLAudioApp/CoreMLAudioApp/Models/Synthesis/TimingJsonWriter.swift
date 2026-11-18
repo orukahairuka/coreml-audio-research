@@ -51,19 +51,20 @@ enum TimingJsonWriter {
     /// - Parameters:
     ///   - timing: 計測結果
     ///   - precision: 精度設定 (rawValue を JSON に保存)
-    ///   - computeUnit: 計算デバイス設定 (rawValue を JSON に保存)
+    ///   - computeUnitLabel: 計算デバイス設定の表記（3 モデル同じ指定なら ComputeUnitOption の rawValue、
+    ///     HiFi-GAN だけ別なら `cpuAndNE+hifi-cpuOnly` のような表記。JSON とファイル名に使う）
     static func write(
         timing: TimingInfo,
         precision: ModelPrecision,
-        computeUnit: ComputeUnitOption
+        computeUnitLabel: String
     ) throws {
         let dir = try resultDirectory()
-        let fileName = "timing_\(precision.rawValue)_\(computeUnit.rawValue).json"
+        let fileName = "timing_\(precision.rawValue)_\(computeUnitLabel).json"
         let url = dir.appendingPathComponent(fileName)
 
         let record = TimingRecord(
             precision: precision.rawValue,
-            computeUnit: computeUnit.rawValue,
+            computeUnit: computeUnitLabel,
             encoderMs: timing.encoderMs,
             decoderTotalMs: timing.decoderTotalMs,
             decoderStepCount: timing.decoderStepCount,

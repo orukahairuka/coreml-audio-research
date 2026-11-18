@@ -112,7 +112,7 @@ struct ContentView: View {
                 // 計算デバイス選択 (.menu を明示。default だと iOS 26 で .navigationLink になり
                 // Picker ↔ Picker のレンダリング順で選択がコミットされない事象があった)
                 Picker("計算デバイス", selection: $viewModel.selectedComputeUnit) {
-                    ForEach(ComputeUnitOption.allCases) { option in
+                    ForEach(AppComputeSetting.allCases) { option in
                         Text(option.displayName)
                             .tag(option)
                             .accessibilityIdentifier("computeUnit.\(option.rawValue)")
