@@ -154,6 +154,16 @@ struct ThesisBenchTests {
         #expect(ThesisBenchRunner.stagesHeader.contains("dec_input_alloc_ms"))
     }
 
+    @Test func preprocessModeIsParsedAndRecordsBothImplementations() throws {
+        let config = try ThesisBenchConfig.fromEnvironment([
+            "CMLA_THESIS_BENCH": "preprocess", "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuOnly",
+        ])
+        #expect(config.mode == .preprocess)
+        #expect(PreprocessBenchRunner.Implementation.allCases.map({ $0.rawValue }) == ["legacy", "current"])
+        #expect(PreprocessBenchRunner.header.contains("resample_ms"))
+        #expect(PreprocessBenchRunner.header.contains("footprint_peak_bytes"))
+    }
+
     @Test func planFailureNamesEveryFailedModel() {
         let error = ThesisBenchRunner.RunError.planFailed(models: ["encoder", "hifigan"])
         let message = error.localizedDescription

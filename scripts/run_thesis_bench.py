@@ -24,6 +24,8 @@ load は条件ごとに「インストールし直してから起動」を 3 回
   # 混合 Compute Units（精度:Encoder・Decoder の CU:HiFi-GAN の CU）＋処理別計測
   scripts/run_thesis_bench.py --device "iPhone (3)" --phases load,infer --profile \\
       --conditions Float16:cpuAndNE,Float16:cpuAndNE:cpuAndGPU,Float16:cpuAndNE:cpuOnly,Float16:cpuOnly
+  # 修正前と修正後の前処理の比較（モデルは使わないが、条件の指定は 1 つ必要）
+  scripts/run_thesis_bench.py --device "iPhone (3)" --phases preprocess --conditions Float16:cpuOnly
   # シミュレータでスクリプトの動作確認
   scripts/run_thesis_bench.py --simulator <UDID> --phases infer --conditions Float32:cpuOnly --inputs 1
 """
@@ -54,14 +56,15 @@ ALL_CONDITIONS = [(p, cu, None) for cu in COMPUTE_UNITS for p in PRECISIONS]
 # 計測コードの版。アプリ側の ThesisBenchConfig.benchVersion と同じ
 # ch4-v2: 混合 Compute Units・処理別計測を追加 / ch4-v3: Decoder のステップごとの統計を既定で取らない
 # ch4-v4: Decoder 入力をまとめてコピーする（--decoder-input-write element で従来の方法）
-BENCH_VERSION = "ch4-v4"
+# ch4-v5: 前処理を公開実装に合わせた。preprocess モードを追加
+BENCH_VERSION = "ch4-v5"
 
 
 def cu_label(cu: str, hifi_cu: str | None) -> str:
     """CSV の compute_units 列の値（アプリ側の computeUnitsLabel と同じ）"""
     return cu if not hifi_cu or hifi_cu == cu else f"{cu}+hifi-{hifi_cu}"
 
-DEFAULT_TIMEOUT = {"load": 600, "plan": 600, "infer": 1800, "vocoder": 900, "thermal": 120}
+DEFAULT_TIMEOUT = {"load": 600, "plan": 600, "infer": 1800, "vocoder": 900, "preprocess": 1200, "thermal": 120}
 
 HOST_HEADER = [
     "session_id", "launch_id", "mode", "precision", "compute_units", "launch_index",

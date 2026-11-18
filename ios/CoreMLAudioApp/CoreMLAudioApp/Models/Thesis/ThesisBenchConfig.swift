@@ -8,7 +8,7 @@ import Foundation
 ///
 /// | 変数 | 内容 |
 /// |---|---|
-/// | `CMLA_THESIS_BENCH` | `load` / `plan` / `infer` / `vocoder` / `thermal` |
+/// | `CMLA_THESIS_BENCH` | `load` / `plan` / `infer` / `vocoder` / `preprocess` / `thermal` |
 /// | `CMLA_THESIS_SESSION` | 計測セッションの ID（出力先 `Documents/Result/thesis/<session>/`） |
 /// | `CMLA_THESIS_LAUNCH` | この起動の ID（PC 側の `host_runs.csv` と突き合わせる） |
 /// | `CMLA_THESIS_PRECISION` | `Float32` / `Float16` / `Int8` |
@@ -25,7 +25,7 @@ import Foundation
 struct ThesisBenchConfig {
 
     enum Mode: String {
-        case load, plan, infer, vocoder, thermal
+        case load, plan, infer, vocoder, preprocess, thermal
     }
 
     enum ConfigError: LocalizedError {
@@ -64,7 +64,8 @@ struct ThesisBenchConfig {
     /// ch4-v2: 混合 Compute Units・処理別計測を追加（Decoder のステップごとの統計は常に取っていた）
     /// ch4-v3: Decoder のステップごとの統計を既定で取らない（`decoder_step_stats` 列で区別する）
     /// ch4-v4: Decoder 入力をまとめてコピーする（`decoder_input_write` 列で区別する）。dec_input_alloc の区間を追加
-    static let benchVersion = "ch4-v4"
+    /// ch4-v5: 前処理を公開実装に合わせた（フレーム数が変わるので ch4-v4 までの結果と直接比べない）。preprocess モードを追加
+    static let benchVersion = "ch4-v5"
 
     /// 計測モードで起動されたか
     static var isRequested: Bool {

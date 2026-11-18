@@ -7,6 +7,7 @@ import Foundation
 /// - `plan`：3 モデルの MLComputePlan を JSON で保存する（参考用）
 /// - `infer`：3 モデルを読み込み、入力ごとにウォームアップ＋定常時の合成を測る
 /// - `vocoder`：HiFi-GAN だけを読み込み、PyTorch 版 Decoder の出力メルを入れて測る
+/// - `preprocess`：修正前と修正後の前処理の結果・時間・メモリを比べる（`PreprocessBenchRunner`）
 /// - `thermal`：`thermalState` を出力するだけ（PC 側が nominal に戻るのを待つのに使う）
 ///
 /// 失敗した実行も行として残す。最後に `THESIS_BENCH_DONE` をコンソールに出す
@@ -70,6 +71,7 @@ final class ThesisBenchRunner {
         case .plan: try await runPlan()
         case .infer: try await runInfer()
         case .vocoder: try await runVocoder()
+        case .preprocess: try PreprocessBenchRunner(config: config, recorder: recorder).run()
         case .thermal: break
         }
     }
