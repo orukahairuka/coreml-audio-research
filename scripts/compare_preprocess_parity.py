@@ -38,7 +38,7 @@ INPUT_DIR = REPO_ROOT / "data/thesis_ch4/inputs"
 TARGET_T = 262
 AUDIO_DIR = REPO_ROOT / "ios/CoreMLAudioApp/CoreMLAudioApp/Models/Audio"
 MAC_SOURCES = ["AudioFeatureExtractor", "LegacyAudioFeatureExtractor", "SoxrHQDecimator",
-               "SoxrHQDecimatorCoefficients", "NpyWriter", "PreprocessStages"]
+               "SoxrHQDecimatorCoefficients", "NpyWriter", "PreprocessStages", "SynthesisOptimizations"]
 
 
 def python_stages(name: str) -> dict[str, np.ndarray]:
