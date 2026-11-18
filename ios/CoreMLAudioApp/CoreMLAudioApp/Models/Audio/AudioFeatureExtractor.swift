@@ -161,11 +161,13 @@ struct AudioFeatureExtractor {
         var window = [Float](repeating: 0, count: fftSize)
         vDSP_hann_window(&window, vDSP_Length(fftSize), Int32(vDSP_HANN_DENORM))
 
-        // 信号が FFT サイズより短い場合、末尾をゼロで埋める
-        let padded = signal + [Float](repeating: 0, count: max(0, fftSize - signal.count))
+        // librosa.stft の center=True, pad_mode="constant" と同じく、信号の両端を nFFT / 2 ずつゼロで埋める。
+        // フレーム t の窓の中心が元の信号の t * hopLength サンプル目になる
+        let edge = [Float](repeating: 0, count: halfFFT)
+        let padded = edge + signal + edge
 
-        // hopLength ずつずらして何フレーム分析できるか
-        let frameCount = max(0, (padded.count - fftSize) / hopLength) + 1
+        // hopLength ずつずらして何フレーム分析できるか（= signal.count / hopLength + 1）
+        let frameCount = (padded.count - fftSize) / hopLength + 1
 
         // Accelerate の FFT エンジンを準備
         let log2n = vDSP_Length(log2(Float(fftSize)))

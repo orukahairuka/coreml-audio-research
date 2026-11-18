@@ -204,6 +204,22 @@ struct AudioFeatureExtractorTests {
                 "1000Hz のピークが bin \(expectedBin) 付近に来るはず、実際は bin \(maxBin)")
     }
 
+    /// フレーム数は librosa.stft（center=True）と同じ len / hop + 1
+    @Test(arguments: [(0, 1), (255, 1), (256, 2), (1000, 4), (67939, 266), (75520, 296)] as [(Int, Int)])
+    func stftFrameCountMatchesCenteredLibrosa(sampleCount: Int, frames: Int) {
+        let (_, frameCount) = AudioFeatureExtractor.stft([Float](repeating: 0, count: sampleCount))
+        #expect(frameCount == frames)
+    }
+
+    /// フレーム 0 の窓の中心は信号の先頭にある（先頭のインパルスの振幅は窓の最大値 1 のまま）
+    @Test func stftFirstFrameIsCenteredOnFirstSample() {
+        var signal = [Float](repeating: 0, count: 1024)
+        signal[0] = 1
+        let (magnitudes, _) = AudioFeatureExtractor.stft(signal)
+        #expect(abs(magnitudes[0] - 1) < 1e-5)
+        #expect(abs(magnitudes[100] - 1) < 1e-5)
+    }
+
     /// 振幅 1 の正弦波がビンの中心にあるとき、librosa.stft の |X[k]| は Σw[n] / 2 = 256 になる
     @Test func stftMagnitudeMatchesLibrosaScale() {
         let bin = 32
