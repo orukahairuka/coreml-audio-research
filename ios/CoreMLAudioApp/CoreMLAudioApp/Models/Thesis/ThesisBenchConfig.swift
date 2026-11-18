@@ -20,6 +20,8 @@ import Foundation
 /// | `CMLA_THESIS_CU_HIFI` | 省略可。HiFi-GAN だけ別の Compute Units で読み込む（Encoder・Decoder は `CMLA_THESIS_CU`）。|
 /// |  | 省略時と `CMLA_THESIS_CU` と同じ値のときは、従来の 3 モデル同一の条件になる |
 /// | `CMLA_THESIS_PROFILE` | 省略可。`1` で infer の End-to-End を処理別に計測し `infer_stages.csv` に出す |
+/// | `CMLA_THESIS_DECODER_INPUT_WRITE` | 省略可。Decoder 入力の書き込み方法 `bulk`（既定）/ `element`（ch4-v3 までの方法。比較用） |
+/// | `CMLA_THESIS_STEP_STATS` | 省略可。`1` で Decoder のステップごとの詳細統計を取る（調査用。ch4-v2 までは常に取っていた）。既定は取らない |
 struct ThesisBenchConfig {
 
     enum Mode: String {
@@ -53,9 +55,16 @@ struct ThesisBenchConfig {
     let hifiganComputeUnitOverride: ComputeUnitOption?
     /// infer で処理別の時間を計測するか
     let profileEnabled: Bool
+    /// Decoder のステップごとの詳細統計を取るか
+    let decoderStepStats: Bool
+    /// Decoder 入力の書き込み方法
+    let decoderInputWrite: DecoderInputWrite
 
     /// 計測コードの版。CSV の `bench_version` 列に出し、追加計測より前の結果（列が無い）と区別する
-    static let benchVersion = "ch4-v2"
+    /// ch4-v2: 混合 Compute Units・処理別計測を追加（Decoder のステップごとの統計は常に取っていた）
+    /// ch4-v3: Decoder のステップごとの統計を既定で取らない（`decoder_step_stats` 列で区別する）
+    /// ch4-v4: Decoder 入力をまとめてコピーする（`decoder_input_write` 列で区別する）。dec_input_alloc の区間を追加
+    static let benchVersion = "ch4-v4"
 
     /// 計測モードで起動されたか
     static var isRequested: Bool {
@@ -92,6 +101,18 @@ struct ThesisBenchConfig {
             guard raw == "0" || raw == "1" else { throw ConfigError.invalid("CMLA_THESIS_PROFILE", raw) }
             profileEnabled = raw == "1"
         }
+        var decoderStepStats = false
+        if let raw = env["CMLA_THESIS_STEP_STATS"] {
+            guard raw == "0" || raw == "1" else { throw ConfigError.invalid("CMLA_THESIS_STEP_STATS", raw) }
+            decoderStepStats = raw == "1"
+        }
+        var decoderInputWrite = DecoderInputWrite.bulk
+        if let raw = env["CMLA_THESIS_DECODER_INPUT_WRITE"] {
+            guard let method = DecoderInputWrite(rawValue: raw) else {
+                throw ConfigError.invalid("CMLA_THESIS_DECODER_INPUT_WRITE", raw)
+            }
+            decoderInputWrite = method
+        }
 
         func intValue(_ key: String, default value: Int) throws -> Int {
             guard let raw = env[key] else { return value }
@@ -112,7 +133,9 @@ struct ThesisBenchConfig {
                 raw.split(separator: ",").map({ String($0) })
             }),
             hifiganComputeUnitOverride: hifiganComputeUnit,
-            profileEnabled: profileEnabled
+            profileEnabled: profileEnabled,
+            decoderStepStats: decoderStepStats,
+            decoderInputWrite: decoderInputWrite
         )
     }
 

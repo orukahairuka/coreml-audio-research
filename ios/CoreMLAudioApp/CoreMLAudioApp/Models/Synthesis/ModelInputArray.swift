@@ -18,11 +18,17 @@ enum ModelInputArray {
         case notContiguous(name: String)
         /// 0 のはずの部分に 0 以外の値がある
         case nonZeroPadding(name: String)
+        /// float32 の配列ではない
+        case notFloat32(name: String)
+        /// コピーする要素数が配列または元データより多い
+        case outOfRange(name: String)
 
         var errorDescription: String? {
             switch self {
             case .notContiguous(let name): return "\(name): 入力配列が連続したメモリ配置ではありません。"
             case .nonZeroPadding(let name): return "\(name): 値を書き込まない部分が 0 になっていません。"
+            case .notFloat32(let name): return "\(name): 入力配列が float32 ではありません。"
+            case .outOfRange(let name): return "\(name): 書き込む要素数が配列の大きさを超えています。"
             }
         }
     }
@@ -75,8 +81,32 @@ enum ModelInputArray {
         }
     }
 
+    /// float32 の配列の先頭 `count` 要素に、`source` の先頭 `count` 要素をそのままコピーする。
+    ///
+    /// `array[i] = NSNumber(value:)` を 1 要素ずつ繰り返すのと同じ結果（同じバイト列）になる。
+    /// 行優先で連続した配置であることを確かめてから、メモリをまとめてコピーする。
+    /// `count` より後ろの要素には触れない（呼び出し側で 0 埋めしておく）
+    /// - Throws: float32 でない、連続でない、または `count` が配列か `source` より大きい場合
+    static func copyFloat32(_ source: [Float], count: Int, into array: MLMultiArray, name: String) throws {
+        guard array.dataType == .float32 else { throw ValidationError.notFloat32(name: name) }
+        guard isRowMajorContiguous(array) else { throw ValidationError.notContiguous(name: name) }
+        guard count >= 0, count <= array.count, count <= source.count else {
+            throw ValidationError.outOfRange(name: name)
+        }
+        guard count > 0 else { return }
+        let byteCount = count * MemoryLayout<Float>.size
+        try array.withUnsafeMutableBytes { buffer, _ in
+            guard let destination = buffer.baseAddress, buffer.count >= byteCount else {
+                throw ValidationError.notContiguous(name: name)
+            }
+            source.withUnsafeBytes { src in
+                destination.copyMemory(from: src.baseAddress!, byteCount: byteCount)
+            }
+        }
+    }
+
     /// strides が行優先の連続配置と一致するか
-    private static func isRowMajorContiguous(_ array: MLMultiArray) -> Bool {
+    static func isRowMajorContiguous(_ array: MLMultiArray) -> Bool {
         let shape = array.shape.map { $0.intValue }
         let strides = array.strides.map { $0.intValue }
         var expected = 1

@@ -122,6 +122,38 @@ struct ThesisBenchTests {
         #expect(new == "a,b,c\n,,3\n")
     }
 
+    @Test func configStepStatsDefaultsOffAndCanBeEnabled() throws {
+        let base = ["CMLA_THESIS_BENCH": "infer", "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuAndNE"]
+        #expect(try ThesisBenchConfig.fromEnvironment(base).decoderStepStats == false)
+        var on = base
+        on["CMLA_THESIS_STEP_STATS"] = "1"
+        #expect(try ThesisBenchConfig.fromEnvironment(on).decoderStepStats)
+        var bad = base
+        bad["CMLA_THESIS_STEP_STATS"] = "true"
+        #expect(throws: ThesisBenchConfig.ConfigError.self) {
+            _ = try ThesisBenchConfig.fromEnvironment(bad)
+        }
+    }
+
+    @Test func configDecoderInputWriteDefaultsToBulk() throws {
+        let base = ["CMLA_THESIS_BENCH": "infer", "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuAndNE"]
+        #expect(try ThesisBenchConfig.fromEnvironment(base).decoderInputWrite == .bulk)
+        var legacy = base
+        legacy["CMLA_THESIS_DECODER_INPUT_WRITE"] = "element"
+        #expect(try ThesisBenchConfig.fromEnvironment(legacy).decoderInputWrite == .element)
+        var bad = base
+        bad["CMLA_THESIS_DECODER_INPUT_WRITE"] = "memcpy"
+        #expect(throws: ThesisBenchConfig.ConfigError.self) {
+            _ = try ThesisBenchConfig.fromEnvironment(bad)
+        }
+    }
+
+    @Test func versionHeaderRecordsStepStats() {
+        #expect(ThesisRecorder.versionHeader.contains("decoder_step_stats"))
+        #expect(ThesisRecorder.versionHeader.contains("decoder_input_write"))
+        #expect(ThesisBenchRunner.stagesHeader.contains("dec_input_alloc_ms"))
+    }
+
     @Test func planFailureNamesEveryFailedModel() {
         let error = ThesisBenchRunner.RunError.planFailed(models: ["encoder", "hifigan"])
         let message = error.localizedDescription

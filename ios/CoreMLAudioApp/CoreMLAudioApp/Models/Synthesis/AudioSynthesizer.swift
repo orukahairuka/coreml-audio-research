@@ -179,7 +179,8 @@ final class AudioSynthesizer {
                 let progress = 0.1 + 0.8 * Double(completed) / Double(effectiveFrameCount)
                 onProgress("Decoder 実行中... (\(completed)/\(effectiveFrameCount))", progress)
             },
-            debug: debug
+            debug: debug,
+            collectStepStats: DecoderRunner.stepStatsEnabledByEnvironment
         )
 
         // 4. HiFi-GAN

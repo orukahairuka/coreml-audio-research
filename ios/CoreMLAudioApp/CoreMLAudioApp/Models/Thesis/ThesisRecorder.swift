@@ -132,6 +132,8 @@ final class ThesisRecorder {
             "hifigan_compute_units": config.hifiganComputeUnit?.rawValue ?? "",
             "bench_version": ThesisBenchConfig.benchVersion,
             "profile_enabled": config.profileEnabled ? "1" : "0",
+            "decoder_step_stats": config.decoderStepStats ? "1" : "0",
+            "decoder_input_write": config.decoderInputWrite.rawValue,
         ]
     }
 
@@ -140,8 +142,11 @@ final class ThesisRecorder {
         "precision", "compute_units", "shape_mode",
     ]
 
-    /// 追加計測（ch4-v2）で足した列。既存の列の並びを変えないよう、各 CSV の末尾に付ける
-    static let versionHeader = ["encdec_compute_units", "hifigan_compute_units", "bench_version", "profile_enabled"]
+    /// 追加計測（ch4-v2 以降）で足した列。既存の列の並びを変えないよう、各 CSV の末尾に付ける
+    static let versionHeader = [
+        "encdec_compute_units", "hifigan_compute_units", "bench_version", "profile_enabled", "decoder_step_stats",
+        "decoder_input_write",
+    ]
 
     // MARK: - crumb
 

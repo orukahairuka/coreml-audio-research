@@ -22,6 +22,55 @@ struct ModelInputArrayTests {
         }
     }
 
+    // MARK: - copyFloat32 / Decoder 入力の書き込み
+
+    /// 配列全体の生バイト列
+    private func bytes(of array: MLMultiArray) -> [UInt8] {
+        array.withUnsafeBytes { raw in Array(raw.prefix(array.count * MemoryLayout<Float>.size)) }
+    }
+
+    /// 生成済みフレームの値（通常の値に加えて NaN・Inf・-0.0・非正規化数も混ぜる）
+    private func sampleFrames(count: Int) -> [Float] {
+        var values = (0..<count).map { i in Float(sin(Double(i) * 0.37)) * 4 - 1.5 }
+        let specials: [Float] = [.nan, .infinity, -.infinity, -0.0, .leastNonzeroMagnitude, .greatestFiniteMagnitude]
+        for (k, v) in specials.enumerated() where k * 97 < count {
+            values[k * 97] = v
+        }
+        return values
+    }
+
+    /// 従来の 1 要素ずつの書き込みと、まとめてコピーする書き込みで、入力配列のバイト列が一致する
+    @Test(arguments: [0, 1, 137, 261, 262])
+    func bulkWriteMatchesElementWrite(frames: Int) throws {
+        let nMels = 256
+        let data = sampleFrames(count: 262 * nMels)
+        let count = frames * nMels
+        let element = try ModelInputArray.zeros(shape: [1, 262, nMels], dataType: .float32)
+        let bulk = try ModelInputArray.zeros(shape: [1, 262, nMels], dataType: .float32)
+        try DecoderRunner.writeInput(data, count: count, into: element, method: .element)
+        try DecoderRunner.writeInput(data, count: count, into: bulk, method: .bulk)
+        #expect(bytes(of: element) == bytes(of: bulk))
+        // 書き込まない部分は 0 のまま（固定長モデルの未生成部分）
+        try ModelInputArray.validateFloat32(bulk, paddingRanges: [count..<(262 * nMels)], name: "test")
+    }
+
+    @Test func copyRejectsTooManyElements() throws {
+        let array = try ModelInputArray.zeros(shape: [1, 2, 3], dataType: .float32)
+        #expect(throws: ModelInputArray.ValidationError.self) {
+            try ModelInputArray.copyFloat32([Float](repeating: 1, count: 7), count: 7, into: array, name: "test")
+        }
+        #expect(throws: ModelInputArray.ValidationError.self) {
+            try ModelInputArray.copyFloat32([1, 2], count: 3, into: array, name: "test")
+        }
+    }
+
+    @Test func copyRejectsNonFloat32() throws {
+        let array = try ModelInputArray.zeros(shape: [1, 4], dataType: .int32)
+        #expect(throws: ModelInputArray.ValidationError.self) {
+            try ModelInputArray.copyFloat32([1, 2], count: 2, into: array, name: "test")
+        }
+    }
+
     // MARK: - validateFloat32
 
     @Test func validatePassesWhenPaddingIsZero() throws {
