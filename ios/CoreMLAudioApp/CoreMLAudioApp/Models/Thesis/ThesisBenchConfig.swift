@@ -8,7 +8,7 @@ import Foundation
 ///
 /// | 変数 | 内容 |
 /// |---|---|
-/// | `CMLA_THESIS_BENCH` | `load` / `plan` / `infer` / `vocoder` / `preprocess` / `thermal` |
+/// | `CMLA_THESIS_BENCH` | `load` / `plan` / `infer` / `vocoder` / `preprocess` / `optab` / `thermal` |
 /// | `CMLA_THESIS_SESSION` | 計測セッションの ID（出力先 `Documents/Result/thesis/<session>/`） |
 /// | `CMLA_THESIS_LAUNCH` | この起動の ID（PC 側の `host_runs.csv` と突き合わせる） |
 /// | `CMLA_THESIS_PRECISION` | `Float32` / `Float16` / `Int8` |
@@ -25,7 +25,7 @@ import Foundation
 struct ThesisBenchConfig {
 
     enum Mode: String {
-        case load, plan, infer, vocoder, preprocess, thermal
+        case load, plan, infer, vocoder, preprocess, optab, thermal
     }
 
     enum ConfigError: LocalizedError {

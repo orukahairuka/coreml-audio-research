@@ -64,7 +64,7 @@ def cu_label(cu: str, hifi_cu: str | None) -> str:
     """CSV の compute_units 列の値（アプリ側の computeUnitsLabel と同じ）"""
     return cu if not hifi_cu or hifi_cu == cu else f"{cu}+hifi-{hifi_cu}"
 
-DEFAULT_TIMEOUT = {"load": 600, "plan": 600, "infer": 1800, "vocoder": 900, "preprocess": 1200, "thermal": 120}
+DEFAULT_TIMEOUT = {"load": 600, "plan": 600, "infer": 1800, "vocoder": 900, "preprocess": 1200, "optab": 3000, "thermal": 120}
 
 HOST_HEADER = [
     "session_id", "launch_id", "mode", "precision", "compute_units", "launch_index",
@@ -286,6 +286,10 @@ class Bench:
             env["CMLA_THESIS_STEP_STATS"] = "1"
         if self.args.decoder_input_write:
             env["CMLA_THESIS_DECODER_INPUT_WRITE"] = self.args.decoder_input_write
+        if mode == "optab":
+            env["CMLA_THESIS_OPT_A"] = self.args.opt_a
+            env["CMLA_THESIS_OPT_B"] = self.args.opt_b
+            env["CMLA_THESIS_PREROLL_SEC"] = str(self.args.preroll_sec)
         label = cu_label(cu, hifi_cu)
         print(f"[{now_iso()}] {launch_id} {mode} {precision}:{label} #{launch_index} (thermal wait {thermal_wait:.0f}s)")
         started_at = now_iso()
@@ -363,6 +367,9 @@ def main() -> int:
                         help="Decoder 入力の書き込み方法（既定はアプリの既定の bulk。element は ch4-v3 までの方法）")
     parser.add_argument("--step-stats", action="store_true",
                         help="Decoder のステップごとの詳細統計を取る（調査用。ch4-v2 までの計測と同じ処理になる）")
+    parser.add_argument("--opt-a", default="none", help="optab: 変更前の高速化の指定")
+    parser.add_argument("--opt-b", default="none", help="optab: 変更後の高速化の指定")
+    parser.add_argument("--preroll-sec", type=float, default=15, help="optab: 計測の前の空運転の秒数")
     parser.add_argument("--inputs", help="入力の名前をカンマ区切りで（既定はアプリの thesis_inputs.json の順）")
     parser.add_argument("--load-install-launches", type=int, default=3,
                         help="load で条件ごとに「インストールし直してから起動」する回数")

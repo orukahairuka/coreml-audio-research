@@ -12,7 +12,7 @@ struct SynthesisOptimizationTests {
     ) throws -> MLMultiArray {
         let rowStride = columns + rowGap
         let pointer = UnsafeMutablePointer<Scalar>.allocate(capacity: rows * rowStride)
-        for i in 0..<(rows * rowStride) { pointer.initialize(to: value(0)) ; pointer[i] = value(i) }
+        for i in 0..<(rows * rowStride) { (pointer + i).initialize(to: value(i)) }
         return try MLMultiArray(
             dataPointer: pointer, shape: [1, rows as NSNumber, columns as NSNumber], dataType: dataType,
             strides: [(rows * rowStride) as NSNumber, rowStride as NSNumber, 1],

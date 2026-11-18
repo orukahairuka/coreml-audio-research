@@ -8,6 +8,7 @@ import Foundation
 /// - `infer`：3 モデルを読み込み、入力ごとにウォームアップ＋定常時の合成を測る
 /// - `vocoder`：HiFi-GAN だけを読み込み、PyTorch 版 Decoder の出力メルを入れて測る
 /// - `preprocess`：修正前と修正後の前処理の結果・時間・メモリを比べる（`PreprocessBenchRunner`）
+/// - `optab`：高速化の前後を同じ起動の中で交互に測る（`OptimizationABRunner`）
 /// - `thermal`：`thermalState` を出力するだけ（PC 側が nominal に戻るのを待つのに使う）
 ///
 /// 失敗した実行も行として残す。最後に `THESIS_BENCH_DONE` をコンソールに出す
@@ -72,6 +73,7 @@ final class ThesisBenchRunner {
         case .infer: try await runInfer()
         case .vocoder: try await runVocoder()
         case .preprocess: try PreprocessBenchRunner(config: config, recorder: recorder).run()
+        case .optab: try await OptimizationABRunner(config: config, recorder: recorder).run()
         case .thermal: break
         }
     }
