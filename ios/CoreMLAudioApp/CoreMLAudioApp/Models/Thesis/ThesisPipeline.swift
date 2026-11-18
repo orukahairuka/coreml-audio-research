@@ -184,7 +184,8 @@ final class ThesisPipeline {
             onStep: { _ in },
             profiler: profiler,
             collectStepStats: decoderStepStats,
-            inputWrite: decoderInputWrite
+            inputWrite: decoderInputWrite,
+            optimizations: optimizations
         )
 
         // 4. HiFi-GAN

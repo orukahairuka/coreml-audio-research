@@ -43,6 +43,7 @@ final class DecoderRunner {
     ///     出力全体を 1 要素ずつ読むので重く、合成結果には使わない。振幅異常などの調査のときだけ true にする。
     ///     false なら返す stepStats は空になる（合成した波形は変わらない）
     ///   - inputWrite: 生成済みフレームを入力配列に書き込む方法。どちらでも入力配列の中身は同じになる
+    ///   - optimizations: 高速化の指定（結果は変わらない）
     /// - Returns: 最終ステップの postnet 出力、選別された各ステップの統計、`predict()` 全ステップ合計の所要時間 (ms)、
     ///            各ステップの `predict()` 所要時間 (ms)、入力 decoder_input に含まれた NaN/Inf 個数の全ステップ最大値
     func run(
@@ -53,7 +54,8 @@ final class DecoderRunner {
         debug: DebugRunSnapshot? = nil,
         profiler: StageProfiler? = nil,
         collectStepStats: Bool = true,
-        inputWrite: DecoderInputWrite = .bulk
+        inputWrite: DecoderInputWrite = .bulk,
+        optimizations: SynthesisOptimizations = .adopted
     ) async throws -> (
         postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
         stepPredictMs: [Double], maxInputNonFiniteCount: Int
@@ -153,8 +155,14 @@ final class DecoderRunner {
             profiler?.lap(ProfileStage.decStepStats)
 
             // 最後のフレームを次の入力に追加（自己回帰）
-            for i in 0..<nMels {
-                decoderInputData.append(melOut[[0, (currentLength - 1) as NSNumber, i as NSNumber]].floatValue)
+            if optimizations.contains(.decoderFrameRead) {
+                decoderInputData.append(contentsOf: MLMultiArrayReader.rows(
+                    melOut, rows: (currentLength - 1)..<currentLength, columns: nMels
+                ))
+            } else {
+                for i in 0..<nMels {
+                    decoderInputData.append(melOut[[0, (currentLength - 1) as NSNumber, i as NSNumber]].floatValue)
+                }
             }
             currentLength += 1
             profiler?.lap(ProfileStage.decAutoregressRead)
