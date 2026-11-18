@@ -145,6 +145,26 @@ final class CoreMLAudioAppUITests: XCTestCase {
         }
     }
 
+    /// 条件 C（Encoder・Decoder は cpuAndNE、HiFi-GAN は cpuOnly）を画面から選んで合成・再生できるかを確かめる。
+    /// 比較のため、Float16 の cpuAndNE（3 モデルとも）と cpuOnly（3 モデルとも）も同じ入力で合成する。
+    /// 合成音は Documents/Result/output_Float16_<設定>.wav に保存される（RMS の比較はホスト側で行う）。
+    /// 合成ボタンは再生が終わるまで無効なので、ボタンが有効に戻り、ステータスが「合成完了」で、
+    /// エラー表示が無ければ、合成と再生が最後まで成功したとみなす。
+    @MainActor
+    func testHifiganCPUSettingSynthesizesAndPlays() throws {
+        let app = XCUIApplication()
+        app.launch()
+        try selectPrecision(app, "Float16")
+        for setting in ["cpuAndNE+hifi-cpuOnly", "cpuAndNE", "cpuOnly"] {
+            try XCTContext.runActivity(named: "Float16 × \(setting)") { _ in
+                try selectComputeUnit(app, setting)
+                try runSynthesisAndWait(app)
+                XCTAssertFalse(app.staticTexts["errorMessage"].exists,
+                               "エラー表示: \(app.staticTexts["errorMessage"].label)")
+            }
+        }
+    }
+
     // MARK: - Helpers
 
     private enum UITestError: Error, CustomStringConvertible {

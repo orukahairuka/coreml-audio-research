@@ -257,6 +257,7 @@ struct ContentView: View {
                         Text(errorMessage)
                             .foregroundStyle(.red)
                             .font(.caption)
+                            .accessibilityIdentifier("errorMessage")
                     }
                 }
 
