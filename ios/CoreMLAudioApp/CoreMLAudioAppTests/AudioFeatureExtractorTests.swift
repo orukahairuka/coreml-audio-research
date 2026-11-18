@@ -28,8 +28,9 @@ struct AudioFeatureExtractorTests {
 
     /// 通過域の 1 kHz は振幅を保ち、22.05 kHz のナイキスト周波数を超える 15 kHz は除去する
     @Test func decimatorPassesLowAndRejectsHighFrequency() {
-        func outputPeak(hz: Float) -> Float {
-            let input = (0..<44100).map({ sin(2 * Float.pi * hz * Float($0) / 44100) })
+        func outputPeak(hz: Double) -> Float {
+            // 位相を単精度で計算すると丸め誤差が広帯域の雑音になるので、倍精度で作る
+            let input = (0..<44100).map({ Float(sin(2 * Double.pi * hz * Double($0) / 44100)) })
             let output = SoxrHQDecimator.decimate(input)
             return output[5000..<17000].map({ abs($0) }).max() ?? 0
         }
