@@ -121,8 +121,9 @@ def timing(root: Path) -> dict:
                 if values:
                     target[f"{key}_median"] = st.median(values)
         else:
-            target["footprint_delta_mb_median"] = st.median(int(r["footprint_delta_bytes"]) / 1e6 for r in items)
-            target["footprint_peak_mb_max"] = max(int(r["footprint_peak_bytes"]) / 1e6 for r in items)
+            target["memory_runs"] = len(items)
+            target["heap_delta_mb_median"] = st.median(int(r["heap_delta_bytes"]) / 1e6 for r in items)
+            target["heap_delta_mb_max"] = max(int(r["heap_delta_bytes"]) / 1e6 for r in items)
     return out
 
 

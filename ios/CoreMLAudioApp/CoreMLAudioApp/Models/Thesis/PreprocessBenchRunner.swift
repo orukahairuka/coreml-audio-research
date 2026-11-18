@@ -5,7 +5,8 @@ import Foundation
 ///
 /// モデルは読み込まない。入力ごとに次の順で実行する。
 /// 1. 時間: ウォームアップ＋定常時の回数だけ、新旧を回ごとに順番を入れ替えて実行する
-/// 2. メモリ: 物理フットプリントを 1 ms ごとに読みながら 3 回実行する（時間の計測とは分ける）
+/// 2. メモリ: 使用中のヒープの量を 1 ms ごとに読みながら 5 回実行する（時間の計測とは分ける）。
+///    物理フットプリントは、解放済みのメモリを malloc が再利用すると増えないため、前処理の使用量の指標にしない
 /// 3. 保存: 各段階の出力を npy に保存する
 final class PreprocessBenchRunner {
 
@@ -14,7 +15,7 @@ final class PreprocessBenchRunner {
     }
 
     static let csvName = "preprocess_runs.csv"
-    static let memoryRuns = 3
+    static let memoryRuns = 5
 
     static let header = ThesisRecorder.commonHeader + [
         "input_name", "implementation", "run_index", "phase", "status", "error",
@@ -22,6 +23,7 @@ final class PreprocessBenchRunner {
         "source_rate", "resampling_method", "sample_count", "T", "T_prime",
         "read_ms", "resample_ms", "load_ms", "mel_ms", "total_ms",
         "footprint_before_bytes", "footprint_peak_bytes", "footprint_delta_bytes", "mel_sha256",
+        "heap_before_bytes", "heap_peak_bytes", "heap_delta_bytes",
     ] + ThesisRecorder.versionHeader
 
     private let config: ThesisBenchConfig
@@ -65,7 +67,7 @@ final class PreprocessBenchRunner {
         values["thermal_before"] = ThesisRecorder.thermalState
         values["started_at"] = ThesisRecorder.timestamp()
 
-        let sampler = sampleMemory ? FootprintSampler() : nil
+        let sampler = sampleMemory ? MemorySampler() : nil
         sampler?.start()
         do {
             try autoreleasepool(invoking: {
@@ -82,6 +84,9 @@ final class PreprocessBenchRunner {
             values["footprint_before_bytes"] = String(result.before)
             values["footprint_peak_bytes"] = String(result.peak)
             values["footprint_delta_bytes"] = String(result.peak >= result.before ? result.peak - result.before : 0)
+            values["heap_before_bytes"] = String(result.heapBefore)
+            values["heap_peak_bytes"] = String(result.heapPeak)
+            values["heap_delta_bytes"] = String(result.heapPeak >= result.heapBefore ? result.heapPeak - result.heapBefore : 0)
         }
         values["thermal_after"] = ThesisRecorder.thermalState
         recorder.appendRow(csvName: Self.csvName, header: Self.header, values: values)
@@ -146,12 +151,14 @@ final class PreprocessBenchRunner {
     }
 }
 
-/// 物理フットプリントを別スレッドで 1 ms ごとに読み、最大値を記録する
-private final class FootprintSampler {
+/// 使用中のヒープの量と物理フットプリントを別スレッドで 1 ms ごとに読み、最大値を記録する
+private final class MemorySampler {
     private let lock = NSLock()
     private var running = false
     private var peak: UInt64 = 0
     private var before: UInt64 = 0
+    private var heapPeak: UInt64 = 0
+    private var heapBefore: UInt64 = 0
     private let finished = DispatchSemaphore(value: 0)
 
     static func footprint() -> UInt64 {
@@ -165,15 +172,25 @@ private final class FootprintSampler {
         return status == KERN_SUCCESS ? info.phys_footprint : 0
     }
 
+    /// malloc が確保して、まだ解放されていないバイト数（全ゾーンの合計）
+    static func heapInUse() -> UInt64 {
+        var statistics = malloc_statistics_t()
+        malloc_zone_statistics(nil, &statistics)
+        return UInt64(statistics.size_in_use)
+    }
+
     func start() {
         before = Self.footprint()
         peak = before
+        heapBefore = Self.heapInUse()
+        heapPeak = heapBefore
         running = true
         Thread.detachNewThread({ [self] in
             while true {
                 lock.lock()
                 let keepRunning = running
                 peak = max(peak, Self.footprint())
+                heapPeak = max(heapPeak, Self.heapInUse())
                 lock.unlock()
                 if !keepRunning { break }
                 Thread.sleep(forTimeInterval: 0.001)
@@ -182,11 +199,11 @@ private final class FootprintSampler {
         })
     }
 
-    func stop() -> (before: UInt64, peak: UInt64) {
+    func stop() -> (before: UInt64, peak: UInt64, heapBefore: UInt64, heapPeak: UInt64) {
         lock.lock()
         running = false
         lock.unlock()
         finished.wait()
-        return (before, peak)
+        return (before, peak, heapBefore, heapPeak)
     }
 }

@@ -161,7 +161,7 @@ struct ThesisBenchTests {
         #expect(config.mode == .preprocess)
         #expect(PreprocessBenchRunner.Implementation.allCases.map({ $0.rawValue }) == ["legacy", "current"])
         #expect(PreprocessBenchRunner.header.contains("resample_ms"))
-        #expect(PreprocessBenchRunner.header.contains("footprint_peak_bytes"))
+        #expect(PreprocessBenchRunner.header.contains("heap_delta_bytes"))
     }
 
     @Test func planFailureNamesEveryFailedModel() {
