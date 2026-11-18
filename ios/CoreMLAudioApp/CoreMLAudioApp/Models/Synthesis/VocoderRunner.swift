@@ -20,17 +20,6 @@ nonisolated final class VocoderRunner {
         self.hopSize = hopSize
     }
 
-    /// `run` をメインアクターの外で実行する
-    @concurrent func runOffMain(
-        postnetOut: MLMultiArray, totalFrames: Int, nMels: Int, profiler: StageProfiler?,
-        optimizations: SynthesisOptimizations
-    ) async throws -> (waveform: [Float], predictMs: Double, inputT: Int, inputNonFiniteCount: Int) {
-        try await run(
-            postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels, profiler: profiler,
-            optimizations: optimizations
-        )
-    }
-
     /// HiFi-GAN を 1 回実行する
     /// - Parameters:
     ///   - postnetOut: Decoder の postnet 出力 [1, T, nMels] (T は可変)
@@ -46,6 +35,33 @@ nonisolated final class VocoderRunner {
     ) async throws -> (
         waveform: [Float], predictMs: Double, inputT: Int, inputNonFiniteCount: Int
     ) {
+        if optimizations.contains(.offMainInference) {
+            return try await performOffMain(
+                postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels, profiler: profiler,
+                optimizations: optimizations
+            )
+        }
+        return try await perform(
+            postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels, profiler: profiler,
+            optimizations: optimizations
+        )
+    }
+
+    /// `perform` をメインアクターの外で実行する
+    @concurrent private func performOffMain(
+        postnetOut: MLMultiArray, totalFrames: Int, nMels: Int, profiler: StageProfiler?,
+        optimizations: SynthesisOptimizations
+    ) async throws -> (waveform: [Float], predictMs: Double, inputT: Int, inputNonFiniteCount: Int) {
+        try await perform(
+            postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels, profiler: profiler,
+            optimizations: optimizations
+        )
+    }
+
+    private nonisolated(nonsending) func perform(
+        postnetOut: MLMultiArray, totalFrames: Int, nMels: Int, profiler: StageProfiler?,
+        optimizations: SynthesisOptimizations
+    ) async throws -> (waveform: [Float], predictMs: Double, inputT: Int, inputNonFiniteCount: Int) {
         // policy に応じてモデルへ渡す T (inputT) と「中身のあるフレーム数」(contentT) を決める。
         // contentT 以降は zero-pad なので、出力波形もここまでで切り出す。
         let inputT: Int

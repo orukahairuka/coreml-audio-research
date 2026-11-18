@@ -66,7 +66,8 @@ struct ThesisBenchConfig {
     /// ch4-v4: Decoder 入力をまとめてコピーする（`decoder_input_write` 列で区別する）。dec_input_alloc の区間を追加
     /// ch4-v5: 前処理を公開実装に合わせた（フレーム数が変わるので ch4-v4 までの結果と直接比べない）。preprocess モードを追加
     /// ch4-v6: 合成処理の高速化（`SynthesisOptimizations.adopted`）を既定で有効にした。optab モードを追加
-    static let benchVersion = "ch4-v6"
+    /// ch4-v7: モデルの呼び出しをメインアクターの外の同期呼び出しにした
+    static let benchVersion = "ch4-v7"
 
     /// 計測モードで起動されたか
     static var isRequested: Bool {

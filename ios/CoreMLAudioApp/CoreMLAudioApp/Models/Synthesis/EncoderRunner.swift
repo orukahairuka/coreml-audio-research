@@ -13,13 +13,6 @@ nonisolated final class EncoderRunner {
         self.policy = policy
     }
 
-    /// `run` をメインアクターの外で実行する
-    @concurrent func runOffMain(
-        mel: [Float], frameCount: Int, nMels: Int, profiler: StageProfiler?, optimizations: SynthesisOptimizations
-    ) async throws -> (memory: MLMultiArray, predictMs: Double, inputNonFiniteCount: Int) {
-        try await run(mel: mel, frameCount: frameCount, nMels: nMels, profiler: profiler, optimizations: optimizations)
-    }
-
     /// Encoder を 1 回実行する
     /// - Parameters:
     ///   - mel: 入力メル [T × nMels] を行優先で並べた配列
@@ -34,6 +27,26 @@ nonisolated final class EncoderRunner {
     ) async throws -> (
         memory: MLMultiArray, predictMs: Double, inputNonFiniteCount: Int
     ) {
+        if optimizations.contains(.offMainInference) {
+            return try await performOffMain(
+                mel: mel, frameCount: frameCount, nMels: nMels, profiler: profiler, optimizations: optimizations
+            )
+        }
+        return try await perform(
+            mel: mel, frameCount: frameCount, nMels: nMels, profiler: profiler, optimizations: optimizations
+        )
+    }
+
+    /// `perform` をメインアクターの外で実行する
+    @concurrent private func performOffMain(
+        mel: [Float], frameCount: Int, nMels: Int, profiler: StageProfiler?, optimizations: SynthesisOptimizations
+    ) async throws -> (memory: MLMultiArray, predictMs: Double, inputNonFiniteCount: Int) {
+        try await perform(mel: mel, frameCount: frameCount, nMels: nMels, profiler: profiler, optimizations: optimizations)
+    }
+
+    private nonisolated(nonsending) func perform(
+        mel: [Float], frameCount: Int, nMels: Int, profiler: StageProfiler?, optimizations: SynthesisOptimizations
+    ) async throws -> (memory: MLMultiArray, predictMs: Double, inputNonFiniteCount: Int) {
         let inputT: Int
         let contentT: Int
         switch policy {

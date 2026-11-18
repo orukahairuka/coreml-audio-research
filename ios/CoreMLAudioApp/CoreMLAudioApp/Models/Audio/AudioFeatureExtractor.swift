@@ -26,8 +26,10 @@ struct AudioFeatureExtractor {
 
     /// wav ファイルからメルスペクトログラムを抽出する
     /// - Returns: (mel: [T, nMels], frameCount: Int)
-    static func extractMelSpectrogram(from url: URL) throws -> (mel: [Float], frameCount: Int) {
-        extractMelSpectrogram(fromSamples: try loadAudio(from: url))
+    static func extractMelSpectrogram(
+        from url: URL, optimizations: SynthesisOptimizations = .adopted
+    ) throws -> (mel: [Float], frameCount: Int) {
+        extractMelSpectrogram(fromSamples: try loadAudio(from: url), optimizations: optimizations)
     }
 
     /// 読み込み済み（22050 Hz・モノラル）の波形からメルスペクトログラムを抽出する

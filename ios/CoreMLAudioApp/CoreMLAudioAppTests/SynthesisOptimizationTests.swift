@@ -60,10 +60,11 @@ struct SynthesisOptimizationTests {
         #expect(dense.mel.map({ $0.bitPattern }) == sparse.mel.map({ $0.bitPattern }))
     }
 
-    /// 同期版の呼び出しはメインアクターを止めるので、通常の合成では使わない
-    @Test func adoptedExcludesSynchronousPrediction() {
-        #expect(!SynthesisOptimizations.adopted.contains(.syncPrediction))
-        #expect(SynthesisOptimizations.adopted.label.split(separator: "+").count == 7)
+    /// 同期版の呼び出しはメインアクターを止めるので、必ずメインアクターの外の実行と組み合わせる
+    @Test func adoptedRunsSynchronousPredictionOffMain() {
+        #expect(SynthesisOptimizations.adopted.contains(.syncPrediction))
+        #expect(SynthesisOptimizations.adopted.contains(.offMainInference))
+        #expect(SynthesisOptimizations.adopted.label.split(separator: "+").count == 9)
     }
 
     @Test func parseAcceptsKnownNamesAndRejectsUnknown() {

@@ -20,11 +20,10 @@ nonisolated struct SynthesisOptimizations: OptionSet, Sendable {
     /// 固定長のとき Decoder の入力の配列を再利用する
     static let reuseDecoderInput = SynthesisOptimizations(rawValue: 1 << 6)
     /// モデルの呼び出しに同期版の `prediction(from:)` を使う。
-    /// 呼び出しは短くなるが、このアプリの合成処理はメインアクターで動くので、呼び出しの間は画面の更新が止まる。
-    /// そのため `adopted` には含めない（計測での比較用）
+    /// メインアクターの上で使うと呼び出しの間は画面の更新が止まるので、`offMainInference` と組み合わせる
     static let syncPrediction = SynthesisOptimizations(rawValue: 1 << 7)
 
-    /// Encoder・Decoder・HiFi-GAN の実行をメインアクターの外で行う（実験用）
+    /// Encoder・Decoder・HiFi-GAN の実行をメインアクターの外で行う
     static let offMainInference = SynthesisOptimizations(rawValue: 1 << 8)
 
     /// 計測モードの指定とファイルに書く名前（適用を試す順）
@@ -44,6 +43,7 @@ nonisolated struct SynthesisOptimizations: OptionSet, Sendable {
     static let adopted: SynthesisOptimizations = [
         .vocoderTranspose, .decoderFrameRead, .sparseMelFilterbank, .vocoderOutputRead,
         .encoderInputCopy, .reuseDecoderPos, .reuseDecoderInput,
+        .syncPrediction, .offMainInference,
     ]
 
     /// `none` またはカンマ区切りの名前を読む。知らない名前があれば nil

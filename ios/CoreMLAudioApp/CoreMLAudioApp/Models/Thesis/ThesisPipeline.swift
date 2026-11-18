@@ -173,44 +173,29 @@ final class ThesisPipeline {
 
         // 2. Encoder
         let encoderRunner = EncoderRunner(model: encoder, policy: transformerPolicy)
-        let encoderResult = optimizations.contains(.offMainInference)
-            ? try await encoderRunner.runOffMain(
-                mel: mel, frameCount: effectiveFrames, nMels: nMels, profiler: profiler, optimizations: optimizations
-            )
-            : try await encoderRunner.run(
-                mel: mel, frameCount: effectiveFrames, nMels: nMels, profiler: profiler, optimizations: optimizations
-            )
+        let encoderResult = try await encoderRunner.run(
+            mel: mel, frameCount: effectiveFrames, nMels: nMels, profiler: profiler, optimizations: optimizations
+        )
 
         // 3. Decoder
         let decoderRunner = DecoderRunner(model: decoder, policy: transformerPolicy)
-        let decoderResult = optimizations.contains(.offMainInference)
-            ? try await decoderRunner.runOffMain(
-                memory: encoderResult.memory, frameCount: effectiveFrames, nMels: nMels, onStep: { _ in },
-                profiler: profiler, collectStepStats: decoderStepStats, inputWrite: decoderInputWrite,
-                optimizations: optimizations
-            )
-            : try await decoderRunner.run(
-                memory: encoderResult.memory,
-                frameCount: effectiveFrames,
-                nMels: nMels,
-                onStep: { _ in },
-                profiler: profiler,
-                collectStepStats: decoderStepStats,
-                inputWrite: decoderInputWrite,
-                optimizations: optimizations
-            )
+        let decoderResult = try await decoderRunner.run(
+            memory: encoderResult.memory,
+            frameCount: effectiveFrames,
+            nMels: nMels,
+            onStep: { _ in },
+            profiler: profiler,
+            collectStepStats: decoderStepStats,
+            inputWrite: decoderInputWrite,
+            optimizations: optimizations
+        )
 
         // 4. HiFi-GAN
         let vocoderRunner = VocoderRunner(model: hifigan, policy: vocoderPolicy)
-        let vocoderResult = optimizations.contains(.offMainInference)
-            ? try await vocoderRunner.runOffMain(
-                postnetOut: decoderResult.postnetOut, totalFrames: effectiveFrames, nMels: nMels, profiler: profiler,
-                optimizations: optimizations
-            )
-            : try await vocoderRunner.run(
-                postnetOut: decoderResult.postnetOut, totalFrames: effectiveFrames, nMels: nMels, profiler: profiler,
-                optimizations: optimizations
-            )
+        let vocoderResult = try await vocoderRunner.run(
+            postnetOut: decoderResult.postnetOut, totalFrames: effectiveFrames, nMels: nMels, profiler: profiler,
+            optimizations: optimizations
+        )
 
         // 5. デエンファシス
         let tDeemph = CFAbsoluteTimeGetCurrent()

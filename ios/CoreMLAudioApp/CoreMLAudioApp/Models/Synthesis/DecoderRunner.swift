@@ -30,21 +30,6 @@ nonisolated final class DecoderRunner {
         self.policy = policy
     }
 
-    /// `run` をメインアクターの外で実行する
-    @concurrent func runOffMain(
-        memory: MLMultiArray, frameCount: Int, nMels: Int, onStep: @escaping @MainActor (Int) -> Void,
-        profiler: StageProfiler?, collectStepStats: Bool, inputWrite: DecoderInputWrite,
-        optimizations: SynthesisOptimizations
-    ) async throws -> (
-        postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
-        stepPredictMs: [Double], maxInputNonFiniteCount: Int
-    ) {
-        try await run(
-            memory: memory, frameCount: frameCount, nMels: nMels, onStep: onStep, profiler: profiler,
-            collectStepStats: collectStepStats, inputWrite: inputWrite, optimizations: optimizations
-        )
-    }
-
     /// Decoder を frameCount 回まわして自己回帰的に出力を生成する
     /// - Parameters:
     ///   - memory: Encoder の出力 [1, T_src, hidden]
@@ -71,6 +56,41 @@ nonisolated final class DecoderRunner {
         collectStepStats: Bool = true,
         inputWrite: DecoderInputWrite = .bulk,
         optimizations: SynthesisOptimizations = .adopted
+    ) async throws -> (
+        postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
+        stepPredictMs: [Double], maxInputNonFiniteCount: Int
+    ) {
+        if optimizations.contains(.offMainInference) {
+            return try await performOffMain(
+                memory: memory, frameCount: frameCount, nMels: nMels, onStep: onStep, debug: debug, profiler: profiler,
+                collectStepStats: collectStepStats, inputWrite: inputWrite, optimizations: optimizations
+            )
+        }
+        return try await perform(
+            memory: memory, frameCount: frameCount, nMels: nMels, onStep: onStep, debug: debug, profiler: profiler,
+            collectStepStats: collectStepStats, inputWrite: inputWrite, optimizations: optimizations
+        )
+    }
+
+    /// `perform` をメインアクターの外で実行する
+    @concurrent private func performOffMain(
+        memory: MLMultiArray, frameCount: Int, nMels: Int, onStep: @escaping @MainActor (Int) -> Void,
+        debug: DebugRunSnapshot?, profiler: StageProfiler?, collectStepStats: Bool, inputWrite: DecoderInputWrite,
+        optimizations: SynthesisOptimizations
+    ) async throws -> (
+        postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
+        stepPredictMs: [Double], maxInputNonFiniteCount: Int
+    ) {
+        try await perform(
+            memory: memory, frameCount: frameCount, nMels: nMels, onStep: onStep, debug: debug, profiler: profiler,
+            collectStepStats: collectStepStats, inputWrite: inputWrite, optimizations: optimizations
+        )
+    }
+
+    private nonisolated(nonsending) func perform(
+        memory: MLMultiArray, frameCount: Int, nMels: Int, onStep: @escaping @MainActor (Int) -> Void,
+        debug: DebugRunSnapshot?, profiler: StageProfiler?, collectStepStats: Bool, inputWrite: DecoderInputWrite,
+        optimizations: SynthesisOptimizations
     ) async throws -> (
         postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
         stepPredictMs: [Double], maxInputNonFiniteCount: Int

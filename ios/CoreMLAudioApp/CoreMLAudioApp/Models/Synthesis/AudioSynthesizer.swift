@@ -115,6 +115,7 @@ final class AudioSynthesizer {
         precision: ModelPrecision,
         computeUnit: ComputeUnitOption,
         hifiganComputeUnit: ComputeUnitOption? = nil,
+        optimizations: SynthesisOptimizations = .adopted,
         onProgress: @escaping @MainActor (String, Double) -> Void
     ) async throws -> SynthesisResult {
         guard let encoder, let decoder, let hifigan else {
@@ -124,7 +125,7 @@ final class AudioSynthesizer {
         // 1. メルスペクトログラム抽出
         await MainActor.run { onProgress("特徴量抽出中...", 0.0) }
         let inputWaveform = try AudioFeatureExtractor.loadAudio(from: inputURL)
-        let melResult = try AudioFeatureExtractor.extractMelSpectrogram(from: inputURL)
+        let melResult = try AudioFeatureExtractor.extractMelSpectrogram(from: inputURL, optimizations: optimizations)
         let melData = melResult.mel
         let frameCount = melResult.frameCount
         let inputDisplayMel = try AudioFeatureExtractor.melSpectrogramForDisplay(from: inputURL)
@@ -165,7 +166,9 @@ final class AudioSynthesizer {
             print("[AudioSynthesizer] WARN: frameCount=\(frameCount) > policy max, cropped to \(effectiveFrameCount)")
         }
         let encoderRunner = EncoderRunner(model: encoder, policy: transformerPolicy)
-        let (memory, encoderMs, _) = try await encoderRunner.run(mel: melData, frameCount: effectiveFrameCount, nMels: nMels)
+        let (memory, encoderMs, _) = try await encoderRunner.run(
+            mel: melData, frameCount: effectiveFrameCount, nMels: nMels, optimizations: optimizations
+        )
         let encoderStats = ArrayStats.compute(from: memory)
 
         // 調査用: Encoder 出力 (memory) を [T_src × hidden] で書き出す。
@@ -198,7 +201,8 @@ final class AudioSynthesizer {
                 onProgress("Decoder 実行中... (\(completed)/\(effectiveFrameCount))", progress)
             },
             debug: debug,
-            collectStepStats: DecoderRunner.stepStatsEnabledByEnvironment
+            collectStepStats: DecoderRunner.stepStatsEnabledByEnvironment,
+            optimizations: optimizations
         )
 
         // 4. HiFi-GAN
@@ -228,7 +232,9 @@ final class AudioSynthesizer {
         }
 
         let vocoderRunner = VocoderRunner(model: hifigan, policy: vocoderPolicy)
-        let vocoderResult = try await vocoderRunner.run(postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels)
+        let vocoderResult = try await vocoderRunner.run(
+            postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels, optimizations: optimizations
+        )
         var waveform = vocoderResult.waveform
         let hifiganMs = vocoderResult.predictMs
         let hifiganInputT = vocoderResult.inputT

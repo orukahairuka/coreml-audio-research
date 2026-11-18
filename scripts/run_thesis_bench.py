@@ -58,7 +58,8 @@ ALL_CONDITIONS = [(p, cu, None) for cu in COMPUTE_UNITS for p in PRECISIONS]
 # ch4-v4: Decoder 入力をまとめてコピーする（--decoder-input-write element で従来の方法）
 # ch4-v5: 前処理を公開実装に合わせた。preprocess モードを追加
 # ch4-v6: 合成処理の高速化を既定で有効にした。optab モードを追加
-BENCH_VERSION = "ch4-v6"
+# ch4-v7: モデルの呼び出しをメインアクターの外の同期呼び出しにした
+BENCH_VERSION = "ch4-v7"
 
 
 def cu_label(cu: str, hifi_cu: str | None) -> str:
