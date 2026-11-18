@@ -109,9 +109,14 @@ final class VocoderRunner {
         //    contentT 分のサンプルだけ返すので、padding 区間 (zeros) は捨てる。
         let validSamples = contentT * hopSize
         let sampleCount = min(waveformArray.count, validSamples)
-        var waveform = [Float](repeating: 0, count: sampleCount)
-        for i in 0..<sampleCount {
-            waveform[i] = waveformArray[i].floatValue
+        var waveform: [Float]
+        if optimizations.contains(.vocoderOutputRead), waveformArray.shape.count == 3, waveformArray.shape[1].intValue == 1 {
+            waveform = MLMultiArrayReader.rows(waveformArray, rows: 0..<1, columns: sampleCount)
+        } else {
+            waveform = [Float](repeating: 0, count: sampleCount)
+            for i in 0..<sampleCount {
+                waveform[i] = waveformArray[i].floatValue
+            }
         }
         profiler?.lap(ProfileStage.vocOutputRead)
         return (waveform, predictMs, inputT, nonFiniteCount)
