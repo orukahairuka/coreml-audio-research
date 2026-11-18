@@ -2,7 +2,7 @@
 ///
 /// どの組み合わせでも、モデルの入出力と合成した波形は変わらない（計測モードと単体テストで確認する）。
 /// `adopted` が通常の合成で使う組み合わせで、計測モードは変更の前後を比べるために個別に指定する。
-struct SynthesisOptimizations: OptionSet, Sendable {
+nonisolated struct SynthesisOptimizations: OptionSet, Sendable {
     let rawValue: Int
 
     /// HiFi-GAN の入力の転置をメモリへの直接のアクセスで行う
@@ -24,6 +24,9 @@ struct SynthesisOptimizations: OptionSet, Sendable {
     /// そのため `adopted` には含めない（計測での比較用）
     static let syncPrediction = SynthesisOptimizations(rawValue: 1 << 7)
 
+    /// Encoder・Decoder・HiFi-GAN の実行をメインアクターの外で行う（実験用）
+    static let offMainInference = SynthesisOptimizations(rawValue: 1 << 8)
+
     /// 計測モードの指定とファイルに書く名前（適用を試す順）
     static let named: [(name: String, option: SynthesisOptimizations)] = [
         ("vocoderTranspose", .vocoderTranspose),
@@ -34,6 +37,7 @@ struct SynthesisOptimizations: OptionSet, Sendable {
         ("reuseDecoderPos", .reuseDecoderPos),
         ("reuseDecoderInput", .reuseDecoderInput),
         ("syncPrediction", .syncPrediction),
+        ("offMainInference", .offMainInference),
     ]
 
     /// 通常の合成で使う組み合わせ（実機の前後比較で採用したもの）

@@ -17,7 +17,7 @@ import Foundation
 ///
 /// 命名は `<timestamp>_<label>_<precision>_<computeUnit>/`。`label` は launchEnvironment の
 /// `CMLA_DEBUG_RUN_LABEL` から拾う (例: `freshFirstRun1`, `withSleep10`).
-struct DebugRunSnapshot {
+nonisolated struct DebugRunSnapshot {
 
     let runDir: URL
     let runId: String

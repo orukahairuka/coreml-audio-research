@@ -8,14 +8,14 @@ import CoreML
 /// 各ステップで前回までの出力全体を入力として渡す素朴な自己回帰実装になっており、
 /// CoreML の動的入力形状を使う。
 /// Decoder 入力（生成済みフレーム）を MLMultiArray に書き込む方法
-enum DecoderInputWrite: String {
+nonisolated enum DecoderInputWrite: String {
     /// `array[i] = NSNumber(value:)` を 1 要素ずつ（ch4-v3 までの方法。比較用に残す）
     case element
     /// 行優先で連続していることを確かめ、メモリをまとめてコピーする（既定）
     case bulk
 }
 
-final class DecoderRunner {
+nonisolated final class DecoderRunner {
     /// 通常の合成で、ステップごとの詳細統計を取るか。
     /// 既定は取らない（重いため）。調査のときは起動時の環境変数 `CMLA_DECODER_STEP_STATS=1` で有効にする
     static var stepStatsEnabledByEnvironment: Bool {
@@ -28,6 +28,21 @@ final class DecoderRunner {
     init(model: MLModel, policy: TransformerInputPolicy = .dynamic(maxT: 1000)) {
         self.model = model
         self.policy = policy
+    }
+
+    /// `run` をメインアクターの外で実行する
+    @concurrent func runOffMain(
+        memory: MLMultiArray, frameCount: Int, nMels: Int, onStep: @escaping @MainActor (Int) -> Void,
+        profiler: StageProfiler?, collectStepStats: Bool, inputWrite: DecoderInputWrite,
+        optimizations: SynthesisOptimizations
+    ) async throws -> (
+        postnetOut: MLMultiArray, stepStats: [DecoderStepStats], totalPredictMs: Double,
+        stepPredictMs: [Double], maxInputNonFiniteCount: Int
+    ) {
+        try await run(
+            memory: memory, frameCount: frameCount, nMels: nMels, onStep: onStep, profiler: profiler,
+            collectStepStats: collectStepStats, inputWrite: inputWrite, optimizations: optimizations
+        )
     }
 
     /// Decoder を frameCount 回まわして自己回帰的に出力を生成する
@@ -46,11 +61,11 @@ final class DecoderRunner {
     ///   - optimizations: 高速化の指定（結果は変わらない）
     /// - Returns: 最終ステップの postnet 出力、選別された各ステップの統計、`predict()` 全ステップ合計の所要時間 (ms)、
     ///            各ステップの `predict()` 所要時間 (ms)、入力 decoder_input に含まれた NaN/Inf 個数の全ステップ最大値
-    func run(
+    nonisolated(nonsending) func run(
         memory: MLMultiArray,
         frameCount: Int,
         nMels: Int,
-        onStep: @MainActor (Int) -> Void,
+        onStep: @escaping @MainActor (Int) -> Void,
         debug: DebugRunSnapshot? = nil,
         profiler: StageProfiler? = nil,
         collectStepStats: Bool = true,
@@ -191,11 +206,17 @@ final class DecoderRunner {
             profiler?.lap(ProfileStage.decAutoregressRead)
 
             // 進捗通知（パーセント計算は呼び出し側に任せる）
-            await MainActor.run { onStep(step + 1) }
+            if optimizations.contains(.offMainInference) {
+                // メインアクターの外で実行するときは、進捗の表示を待たずに次のステップへ進む
+                let completed = step + 1
+                Task { @MainActor in onStep(completed) }
+            } else {
+                await MainActor.run { onStep(step + 1) }
 
-            // UI 更新のため定期的に yield
-            if step % 10 == 0 {
-                await Task.yield()
+                // UI 更新のため定期的に yield
+                if step % 10 == 0 {
+                    await Task.yield()
+                }
             }
             profiler?.lap(ProfileStage.decProgressYield)
         }

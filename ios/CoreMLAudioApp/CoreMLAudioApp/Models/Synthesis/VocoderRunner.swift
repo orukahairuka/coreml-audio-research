@@ -5,7 +5,7 @@ import CoreML
 /// 入力 T 処理は `VocoderInputPolicy` で切り替える:
 /// - `.fixed(targetT)`: 固定 shape モデル (例: `_fixed262`)。`totalFrames` を targetT に zero-pad / crop
 /// - `.dynamic(maxT)`: RangeDim モデル。`totalFrames` をそのまま渡し、上限超過時のみ crop
-final class VocoderRunner {
+nonisolated final class VocoderRunner {
     private let model: MLModel
     private let policy: VocoderInputPolicy
     private let hopSize: Int
@@ -20,6 +20,17 @@ final class VocoderRunner {
         self.hopSize = hopSize
     }
 
+    /// `run` をメインアクターの外で実行する
+    @concurrent func runOffMain(
+        postnetOut: MLMultiArray, totalFrames: Int, nMels: Int, profiler: StageProfiler?,
+        optimizations: SynthesisOptimizations
+    ) async throws -> (waveform: [Float], predictMs: Double, inputT: Int, inputNonFiniteCount: Int) {
+        try await run(
+            postnetOut: postnetOut, totalFrames: totalFrames, nMels: nMels, profiler: profiler,
+            optimizations: optimizations
+        )
+    }
+
     /// HiFi-GAN を 1 回実行する
     /// - Parameters:
     ///   - postnetOut: Decoder の postnet 出力 [1, T, nMels] (T は可変)
@@ -29,7 +40,7 @@ final class VocoderRunner {
     ///   - optimizations: 高速化の指定（結果は変わらない）
     /// - Returns: 合成波形 (デエンファシス前の生 PCM, 22050 Hz, 長さ = `contentT * hopSize`),
     ///            `predict()` の所要時間 (ms), モデルに渡した実効 T (`inputT`), 入力メルに含まれた NaN/Inf の個数
-    func run(
+    nonisolated(nonsending) func run(
         postnetOut: MLMultiArray, totalFrames: Int, nMels: Int, profiler: StageProfiler? = nil,
         optimizations: SynthesisOptimizations = .adopted
     ) async throws -> (

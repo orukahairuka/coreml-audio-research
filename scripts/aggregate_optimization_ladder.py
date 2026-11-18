@@ -57,7 +57,17 @@ def analyze(directory: Path) -> dict:
         median, low, high = interval(b - a)
         result[key] = {"a_median_ms": float(np.median(a)), "b_median_ms": float(np.median(b)),
                        "delta_median_ms": median, "delta_ci95_ms": [low, high]}
-    if directory.name.endswith("syncPrediction"):
+    if "main_stall_max_ms" in rows[0] and rows[0]["main_stall_max_ms"]:
+        result["main_thread"] = {
+            variant: {
+                "max_gap_median_ms": float(np.median([float(p[variant]["main_stall_max_ms"]) for p in complete])),
+                "max_gap_worst_ms": float(np.max([float(p[variant]["main_stall_max_ms"]) for p in complete])),
+                "over16_count_median": float(np.median([int(p[variant]["main_stall_over16_count"]) for p in complete])),
+                "over33_count_median": float(np.median([int(p[variant]["main_stall_over33_count"]) for p in complete])),
+                "over16_total_median_ms": float(np.median([float(p[variant]["main_stall_over16_total_ms"]) for p in complete])),
+            } for variant in "AB"
+        }
+    if directory.name.endswith("syncPrediction") or directory.name.startswith("E"):
         faster = result["e2e"]["delta_ci95_ms"][1] < 0
     else:
         faster = result["non_predict"]["delta_ci95_ms"][1] < 0 and result["e2e"]["delta_median_ms"] < 0
@@ -82,6 +92,10 @@ def main() -> int:
         fmt = lambda m: f"{m['delta_median_ms']:+8.2f} [{m['delta_ci95_ms'][0]:+7.2f},{m['delta_ci95_ms'][1]:+7.2f}]"
         print(f"{r['step']:24s} n={r['pairs']:2d} 出力一致={r['outputs_identical']} 熱={','.join(r['thermal'])} "
               f"E2E {e['a_median_ms']:7.1f}→{e['b_median_ms']:7.1f} 差{fmt(e)} 推論差{fmt(p)} 推論外差{fmt(n)} 基準={r['meets_criteria']}")
+        if "main_thread" in r:
+            for variant, m in r["main_thread"].items():
+                print(f"    メインスレッド {variant}: 最大の停止 中央値{m['max_gap_median_ms']:.1f} 最悪{m['max_gap_worst_ms']:.1f} ms、"
+                      f"16.7 ms超 {m['over16_count_median']:.0f} 回（合計 {m['over16_total_median_ms']:.0f} ms）、33.3 ms超 {m['over33_count_median']:.0f} 回")
         if len(r["by_condition"]) > 1:
             for name, entry in sorted(r["by_condition"].items()):
                 print(f"    {name:42s} 出力が一致した対 {entry['identical']}/{entry['pairs']}")

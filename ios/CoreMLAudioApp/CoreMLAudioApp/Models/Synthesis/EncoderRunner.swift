@@ -4,13 +4,20 @@ import CoreML
 ///
 /// 入力メルスペクトログラムを Encoder に通して memory（中間表現）を得る。
 /// memory は後段の Decoder で全ステップを通じて繰り返し参照される。
-final class EncoderRunner {
+nonisolated final class EncoderRunner {
     private let model: MLModel
     private let policy: TransformerInputPolicy
 
     init(model: MLModel, policy: TransformerInputPolicy = .dynamic(maxT: 1000)) {
         self.model = model
         self.policy = policy
+    }
+
+    /// `run` をメインアクターの外で実行する
+    @concurrent func runOffMain(
+        mel: [Float], frameCount: Int, nMels: Int, profiler: StageProfiler?, optimizations: SynthesisOptimizations
+    ) async throws -> (memory: MLMultiArray, predictMs: Double, inputNonFiniteCount: Int) {
+        try await run(mel: mel, frameCount: frameCount, nMels: nMels, profiler: profiler, optimizations: optimizations)
     }
 
     /// Encoder を 1 回実行する
@@ -21,7 +28,7 @@ final class EncoderRunner {
     ///   - profiler: 処理別計測（卒論第4章の追加計測用）。nil なら計測しない
     ///   - optimizations: 高速化の指定（結果は変わらない）
     /// - Returns: Encoder 出力の memory、`predict()` の所要時間 (ms)、入力メルに含まれた NaN/Inf の個数
-    func run(
+    nonisolated(nonsending) func run(
         mel: [Float], frameCount: Int, nMels: Int, profiler: StageProfiler? = nil,
         optimizations: SynthesisOptimizations = .adopted
     ) async throws -> (

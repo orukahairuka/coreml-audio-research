@@ -8,7 +8,7 @@ import Foundation
 ///
 /// Runner は `profiler: StageProfiler? = nil` を受け取り、nil のときは `profiler?.lap(...)` が
 /// 何もしないので、従来の経路の動作は変わらない。
-final class StageProfiler {
+nonisolated final class StageProfiler {
 
     /// 区間名 → 積算時間 (ms)
     private(set) var totals: [String: Double] = [:]
@@ -46,7 +46,7 @@ final class StageProfiler {
 }
 
 /// 処理別計測の区間名。CSV の列名（`<名前>_ms`）にもそのまま使う
-enum ProfileStage {
+nonisolated enum ProfileStage {
     // 前処理
     static let audioLoad = "pre_audio_load"
     static let melExtract = "pre_mel_extract"

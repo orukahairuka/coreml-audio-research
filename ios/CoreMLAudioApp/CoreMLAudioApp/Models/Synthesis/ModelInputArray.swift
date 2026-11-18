@@ -11,7 +11,7 @@ import CoreML
 /// 書き込んだ部分に NaN/Inf が含まれていても例外にはしない（数を返すだけ）。
 /// Decoder の自己回帰出力が不安定な条件では NaN/Inf が入力に戻ってくるが、
 /// それは止めずに後段まで流し、HiFi-GAN 出力の NaN/Inf として記録したい観測対象であるため。
-enum ModelInputArray {
+nonisolated enum ModelInputArray {
 
     enum ValidationError: LocalizedError {
         /// 配列が行優先で連続していない（範囲の計算が成り立たない）

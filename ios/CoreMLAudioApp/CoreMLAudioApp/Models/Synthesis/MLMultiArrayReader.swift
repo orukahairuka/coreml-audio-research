@@ -4,7 +4,7 @@ import CoreML
 ///
 /// Float16 モデルの出力は `float16` 型で、行の間に隙間がある配置（strides）になることがあるので、
 /// 型と strides を見て読む。対応していない型は添字で読む。
-enum MLMultiArrayReader {
+nonisolated enum MLMultiArrayReader {
 
     /// [1, 行, 列] の配列の `rows` の行を、行優先で `destination` に書き込む
     static func readRows(
@@ -57,7 +57,7 @@ enum MLMultiArrayReader {
 
 extension MLModel {
     /// 同期版の `prediction(from:)` を呼ぶ（async の文脈からは async 版が選ばれるので分けている）
-    func predictSynchronously(from input: MLFeatureProvider) throws -> MLFeatureProvider {
+    nonisolated func predictSynchronously(from input: MLFeatureProvider) throws -> MLFeatureProvider {
         try prediction(from: input)
     }
 }

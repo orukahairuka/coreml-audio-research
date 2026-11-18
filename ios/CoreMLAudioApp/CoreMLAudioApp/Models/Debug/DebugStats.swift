@@ -2,7 +2,7 @@ import CoreML
 import Foundation
 
 /// MLMultiArray の統計情報（デバッグ用）
-struct ArrayStats {
+nonisolated struct ArrayStats {
     let min: Float
     let max: Float
     let mean: Float
@@ -63,7 +63,7 @@ extension ArrayStats {
 }
 
 /// デコーダー1ステップ分の統計
-struct DecoderStepStats {
+nonisolated struct DecoderStepStats {
     let step: Int
     let melOut: ArrayStats
     let postnetOut: ArrayStats

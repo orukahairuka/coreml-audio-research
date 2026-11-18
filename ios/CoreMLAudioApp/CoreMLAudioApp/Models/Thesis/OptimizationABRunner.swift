@@ -30,7 +30,9 @@ final class OptimizationABRunner {
         "thermal_before", "thermal_after", "started_at", "T", "T_prime", "decoder_steps",
         "e2e_ms", "predict_sum_ms", "non_predict_ms", "encoder_ms", "decoder_total_ms", "hifigan_ms",
         "mel_in_sha256", "decoder_mel_sha256", "hifigan_wave_sha256", "deemph_wave_sha256",
-    ] + ProfileStage.all.map({ "\($0)_ms" }) + ThesisRecorder.versionHeader
+    ] + ProfileStage.all.map({ "\($0)_ms" }) + ThesisRecorder.versionHeader + [
+        "main_stall_max_ms", "main_stall_over16_count", "main_stall_over33_count", "main_stall_over16_total_ms",
+    ]
 
     private let config: ThesisBenchConfig
     private let recorder: ThesisRecorder
@@ -106,7 +108,14 @@ final class OptimizationABRunner {
         values["started_at"] = ThesisRecorder.timestamp()
         do {
             let profiler = StageProfiler()
+            let stallProbe = MainThreadStallProbe()
+            stallProbe.start()
             let m = try await pipeline.synthesize(inputURL: url, profiler: profiler, optimizations: optimizations)
+            let stall = stallProbe.stop()
+            values["main_stall_max_ms"] = ThesisBenchRunner.ms(stall.maxGapMs)
+            values["main_stall_over16_count"] = String(stall.over16Count)
+            values["main_stall_over33_count"] = String(stall.over33Count)
+            values["main_stall_over16_total_ms"] = ThesisBenchRunner.ms(stall.over16TotalMs)
             let predictMs = ProfileStage.predictStages.map({ profiler.ms($0) }).reduce(0, +)
             values["status"] = "success"
             values["T"] = String(m.totalFrames)

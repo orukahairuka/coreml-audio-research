@@ -115,7 +115,7 @@ final class AudioSynthesizer {
         precision: ModelPrecision,
         computeUnit: ComputeUnitOption,
         hifiganComputeUnit: ComputeUnitOption? = nil,
-        onProgress: @MainActor (String, Double) -> Void
+        onProgress: @escaping @MainActor (String, Double) -> Void
     ) async throws -> SynthesisResult {
         guard let encoder, let decoder, let hifigan else {
             throw SynthesisError.modelNotLoaded
@@ -360,7 +360,7 @@ final class AudioSynthesizer {
         return size
     }
 
-    enum SynthesisError: LocalizedError {
+    nonisolated enum SynthesisError: LocalizedError {
         case modelNotFound(precision: String)
         case modelNotLoaded
         case decoderFailed

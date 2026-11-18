@@ -99,14 +99,14 @@ enum ShapeModeOption: String, CaseIterable, Identifiable {
 }
 
 /// VocoderRunner の入力 T 処理ポリシー
-enum VocoderInputPolicy {
+nonisolated enum VocoderInputPolicy {
     /// 固定 shape モデル用: `totalFrames < targetT` なら zero-pad、`> targetT` なら crop
     case fixed(targetT: Int)
     /// 動的 shape モデル用: 実際の `totalFrames` をそのまま渡す。`> maxT` なら crop
     case dynamic(maxT: Int)
 }
 
-enum TransformerInputPolicy {
+nonisolated enum TransformerInputPolicy {
     case fixed(targetT: Int)
     case dynamic(maxT: Int)
 }
