@@ -32,11 +32,15 @@ struct AudioFeatureExtractor {
 
     /// 読み込み済み（22050 Hz・モノラル）の波形からメルスペクトログラムを抽出する
     /// - Returns: (mel: [T, nMels], frameCount: Int)
-    static func extractMelSpectrogram(fromSamples samples: [Float]) -> (mel: [Float], frameCount: Int) {
+    /// - Parameter optimizations: 高速化の指定（結果は変わらない）
+    static func extractMelSpectrogram(
+        fromSamples samples: [Float], optimizations: SynthesisOptimizations = .adopted
+    ) -> (mel: [Float], frameCount: Int) {
         let preprocessed = preprocess(samples)
         let emphasized = applyPreemphasis(preprocessed)
         let magnitude = stft(emphasized)
-        let melSpec = applyMelFilterbank(magnitude)
+        let melSpec = optimizations.contains(.sparseMelFilterbank)
+            ? applyMelFilterbankSparse(magnitude) : applyMelFilterbank(magnitude)
         let normalized = normalizeToDB(melSpec)
         let frameCount = normalized.count / nMels
         return (normalized, frameCount)
@@ -308,6 +312,49 @@ struct AudioFeatureExtractor {
             }
         }
 
+        return (mel, frameCount)
+    }
+
+    /// メルフィルタバンクと、帯域ごとの 0 でない FFT ビンの範囲（一度だけ作って再利用する）
+    private static let sparseFilterbank: (weights: [Float], ranges: [Range<Int>]) = {
+        let binCount = nFFT / 2 + 1
+        let weights = createMelFilterbank(
+            sampleRate: Float(sampleRate), nFFT: nFFT, nMels: nMels, fMin: 0, fMax: Float(sampleRate / 2)
+        )
+        let ranges = (0..<nMels).map({ band -> Range<Int> in
+            let row = weights[(band * binCount)..<((band + 1) * binCount)]
+            guard let first = row.firstIndex(where: { $0 != 0 }), let last = row.lastIndex(where: { $0 != 0 }) else {
+                return 0..<0
+            }
+            return (first - band * binCount)..<(last - band * binCount + 1)
+        })
+        return (weights, ranges)
+    }()
+
+    /// `applyMelFilterbank` と同じ順序で、0 でない範囲だけを足し合わせる
+    /// （0 の項を足しても和は変わらないので、結果はビット単位で同じになる）
+    static func applyMelFilterbankSparse(_ stftResult: (magnitudes: [Float], frameCount: Int)) -> (mel: [Float], frameCount: Int) {
+        let (magnitudes, frameCount) = stftResult
+        let binCount = nFFT / 2 + 1
+        let (weights, ranges) = sparseFilterbank
+        var mel = [Float](repeating: 0, count: frameCount * nMels)
+        mel.withUnsafeMutableBufferPointer({ output in
+            weights.withUnsafeBufferPointer({ filter in
+                magnitudes.withUnsafeBufferPointer({ spectrum in
+                    for t in 0..<frameCount {
+                        let frame = t * binCount
+                        for m in 0..<nMels {
+                            let row = m * binCount
+                            var sum: Float = 0
+                            for k in ranges[m] {
+                                sum += filter[row + k] * spectrum[frame + k]
+                            }
+                            output[t * nMels + m] = sum
+                        }
+                    }
+                })
+            })
+        })
         return (mel, frameCount)
     }
 

@@ -50,6 +50,16 @@ struct SynthesisOptimizationTests {
         #expect(MLMultiArrayReader.rows(array, rows: 0..<1, columns: 16) == expected)
     }
 
+    /// 0 でない範囲だけを足し合わせても、すべてを足し合わせたときとビット単位で同じになる
+    @Test func sparseMelFilterbankIsBitIdenticalToDense() {
+        let signal = (0..<8192).map({ Float(sin(Double($0) * 0.031) + 0.4 * sin(Double($0) * 0.47)) })
+        let magnitude = AudioFeatureExtractor.stft(signal)
+        let dense = AudioFeatureExtractor.applyMelFilterbank(magnitude)
+        let sparse = AudioFeatureExtractor.applyMelFilterbankSparse(magnitude)
+        #expect(dense.frameCount == sparse.frameCount)
+        #expect(dense.mel.map({ $0.bitPattern }) == sparse.mel.map({ $0.bitPattern }))
+    }
+
     @Test func parseAcceptsKnownNamesAndRejectsUnknown() {
         #expect(SynthesisOptimizations.parse("none") == [])
         #expect(SynthesisOptimizations.parse("vocoderTranspose,reuseDecoderPos") == [.vocoderTranspose, .reuseDecoderPos])

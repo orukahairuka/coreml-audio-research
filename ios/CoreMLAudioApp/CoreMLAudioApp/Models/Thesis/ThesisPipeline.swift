@@ -160,7 +160,9 @@ final class ThesisPipeline {
         // 1. 前処理（読み込み・リサンプリング・メル抽出）
         let samples = try AudioFeatureExtractor.loadAudio(from: inputURL)
         profiler?.lap(ProfileStage.audioLoad)
-        let (mel, totalFrames) = AudioFeatureExtractor.extractMelSpectrogram(fromSamples: samples)
+        let (mel, totalFrames) = AudioFeatureExtractor.extractMelSpectrogram(
+            fromSamples: samples, optimizations: optimizations
+        )
         let effectiveFrames: Int
         switch transformerPolicy {
         case .fixed(let targetT): effectiveFrames = min(totalFrames, targetT)
