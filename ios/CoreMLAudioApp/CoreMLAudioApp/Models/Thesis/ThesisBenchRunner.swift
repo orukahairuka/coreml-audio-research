@@ -243,6 +243,14 @@ final class ThesisBenchRunner {
             encoder: enc.model, decoder: dec.model, hifigan: hifi.model, decoderStepStats: config.decoderStepStats,
             decoderInputWrite: config.decoderInputWrite
         )
+        let models: [String: Any] = [
+            "encoder": ThesisRunMetadata.modelEntry(
+                resourceName: Self.resourceName(urls.encoder), model: enc.model, computeUnit: computeUnit),
+            "decoder": ThesisRunMetadata.modelEntry(
+                resourceName: Self.resourceName(urls.decoder), model: dec.model, computeUnit: computeUnit),
+            "hifigan": ThesisRunMetadata.modelEntry(
+                resourceName: Self.resourceName(urls.hifigan), model: hifi.model, computeUnit: hifiganComputeUnit),
+        ]
 
         let names = try config.inputNames ?? ThesisPipeline.inputInfos().map({ $0.input_name })
         var isFirstAfterLoad = true
@@ -267,8 +275,19 @@ final class ThesisBenchRunner {
                     values["thermal_after"] = ThesisRecorder.thermalState
                     values.merge(inferValues(m), uniquingKeysWith: { _, new in new })
                     values["status"] = "success"
-                    values["file_prefix"] = "runs/\(config.launchID)/\(prefix)"
-                    try saveInferFiles(m, prefix: prefix, saveMelIn: runIndex == 0)
+                    // 保存は合成の計測が終わった後に行う（m の時間には含まれない）
+                    if config.saveArrays {
+                        values["file_prefix"] = "runs/\(config.launchID)/\(prefix)"
+                        let arrays = try saveInferFiles(m, prefix: prefix, saveMelIn: runIndex == 0, values: values)
+                        let input = ThesisRunMetadata.InputEntry(
+                            name: name, file: "thesis_src_\(name).wav",
+                            totalFrames: m.totalFrames, effectiveFrames: m.effectiveFrames
+                        )
+                        try recorder.writeJSON(
+                            ThesisRunMetadata.build(config: config, values: values, input: input, models: models, arrays: arrays),
+                            fileName: "\(prefix)_meta.json"
+                        )
+                    }
                     if let profile = m.profile {
                         recordStages(profile, measurement: m, values: values)
                     }
@@ -340,17 +359,50 @@ final class ThesisBenchRunner {
         return values
     }
 
-    private func saveInferFiles(_ m: ThesisPipeline.Measurement, prefix: String, saveMelIn: Bool) throws {
+    /// 実行ごとの配列を保存し、meta.json に書く説明を返す。ファイル名と中身は従来と同じ
+    private func saveInferFiles(
+        _ m: ThesisPipeline.Measurement, prefix: String, saveMelIn: Bool, values: [String: String]
+    ) throws -> [ThesisRunMetadata.ArrayEntry] {
         let nMels = ThesisPipeline.nMels
-        if saveMelIn {
-            try recorder.writeNpy(m.melIn, rows: m.effectiveFrames, cols: nMels, fileName: "\(prefix)_mel_in.npy")
+        var entries = [ThesisRunMetadata.ArrayEntry]()
+        func npy(_ data: [Float], rows: Int, cols: Int, key: String, axes: [String], _ description: String, sha256: String? = nil) throws {
+            guard rows > 0, cols > 0 else { return }
+            let fileName = "\(prefix)_\(key).npy"
+            try recorder.writeNpy(data, rows: rows, cols: cols, fileName: fileName)
+            entries.append(.init(key: key, fileName: fileName, shape: [rows, cols], dtype: "float32", axes: axes,
+                                 description: description, sha256: sha256))
         }
-        try recorder.writeNpy(m.decoderMel, rows: m.decoderMel.count / nMels, cols: nMels, fileName: "\(prefix)_decoder_mel.npy")
-        try recorder.writeNpy(m.decoderStepMs.map({ Float($0) }), rows: 1, cols: m.decoderStepMs.count,
-                              fileName: "\(prefix)_decoder_step_ms.npy")
-        try recorder.writeNpy(m.hifiganWaveform, rows: 1, cols: m.hifiganWaveform.count, fileName: "\(prefix)_hifigan.npy")
-        try recorder.writeNpy(m.deemphWaveform, rows: 1, cols: m.deemphWaveform.count, fileName: "\(prefix)_deemph.npy")
-        try recorder.writeWav(m.deemphWaveform, sampleRate: AudioFeatureExtractor.sampleRate, fileName: "\(prefix)_deemph.wav")
+        if saveMelIn {
+            try npy(m.melIn, rows: m.effectiveFrames, cols: nMels, key: "mel_in", axes: ["frame", "mel"],
+                    "前処理の出力（Encoder に入れた正規化済みのメルスペクトログラムの先頭 T′ フレーム）。入力ごとに run_index 0 だけ保存",
+                    sha256: values["mel_in_sha256"])
+        }
+        try npy(m.decoderMel, rows: m.decoderMel.count / nMels, cols: nMels, key: "decoder_mel", axes: ["frame", "mel"],
+                "Decoder の最後の実行の補正後（Postnet 後）のメルスペクトログラムの先頭 T′ フレーム。"
+                    + "HiFi-GAN には、これを 262 フレームの 0 埋めした配列の先頭に書き込んで入力する",
+                sha256: values["decoder_mel_sha256"])
+        try npy(m.decoderStepMs.map({ Float($0) }), rows: 1, cols: m.decoderStepMs.count, key: "decoder_step_ms",
+                axes: ["batch", "step"], "Decoder の各回の predict の時間（ミリ秒）")
+        try npy(m.hifiganWaveform, rows: 1, cols: m.hifiganWaveform.count, key: "hifigan", axes: ["batch", "sample"],
+                "HiFi-GAN の出力の先頭 256T′ サンプル（デエンファシス前）", sha256: values["hifigan_wave_sha256"])
+        try npy(m.deemphWaveform, rows: 1, cols: m.deemphWaveform.count, key: "deemph", axes: ["batch", "sample"],
+                "デエンファシス後、16 ビットへの変換前の波形", sha256: values["deemph_wave_sha256"])
+        try appendWav(m.deemphWaveform, prefix: prefix, to: &entries)
+        return entries
+    }
+
+    /// デエンファシス後の波形を 16 ビットの wav で保存し、説明を足す
+    private func appendWav(_ waveform: [Float], prefix: String, to entries: inout [ThesisRunMetadata.ArrayEntry]) throws {
+        guard !waveform.isEmpty else { return }
+        let fileName = "\(prefix)_deemph.wav"
+        try recorder.writeWav(waveform, sampleRate: AudioFeatureExtractor.sampleRate, fileName: fileName)
+        entries.append(.init(key: "deemph_wav", fileName: fileName, shape: [waveform.count], dtype: "int16",
+                             axes: ["sample"],
+                             description: "deemph を 16 ビット PCM・モノラルに変換した wav（アプリが保存・再生する形式）"))
+    }
+
+    static func resourceName(_ url: URL) -> String {
+        url.deletingPathExtension().lastPathComponent
     }
 
     // MARK: - vocoder
@@ -361,6 +413,10 @@ final class ThesisBenchRunner {
         let hifi = try ThesisPipeline.loadModel(at: urls.hifigan, computeUnit: hifiganComputeUnit)
         ThesisRecorder.log("[thesis] vocoder \(config.conditionLabel) loaded in \(Self.ms(hifi.ms)) ms")
         let runner = VocoderRunner(model: hifi.model, policy: ThesisBenchConfig.shapeMode.inputPolicy)
+        let models: [String: Any] = [
+            "hifigan": ThesisRunMetadata.modelEntry(
+                resourceName: Self.resourceName(urls.hifigan), model: hifi.model, computeUnit: hifiganComputeUnit),
+        ]
 
         let infos = try ThesisPipeline.inputInfos()
         let names = config.inputNames ?? infos.map({ $0.input_name })
@@ -404,10 +460,37 @@ final class ThesisBenchRunner {
                     values["deemph_wave_sha256"] = ThesisRecorder.sha256(deemph)
                     values.merge(waveformValues(prefix: "hifigan", result.waveform), uniquingKeysWith: { _, new in new })
                     values.merge(waveformValues(prefix: "deemph", deemph), uniquingKeysWith: { _, new in new })
-                    values["file_prefix"] = "runs/\(config.launchID)/\(prefix)"
-                    try recorder.writeNpy(result.waveform, rows: 1, cols: result.waveform.count, fileName: "\(prefix)_hifigan.npy")
-                    try recorder.writeNpy(deemph, rows: 1, cols: deemph.count, fileName: "\(prefix)_deemph.npy")
-                    try recorder.writeWav(deemph, sampleRate: AudioFeatureExtractor.sampleRate, fileName: "\(prefix)_deemph.wav")
+                    if config.saveArrays {
+                        values["file_prefix"] = "runs/\(config.launchID)/\(prefix)"
+                        var entries = [ThesisRunMetadata.ArrayEntry]()
+                        if !result.waveform.isEmpty {
+                            try recorder.writeNpy(result.waveform, rows: 1, cols: result.waveform.count, fileName: "\(prefix)_hifigan.npy")
+                            entries.append(.init(
+                                key: "hifigan", fileName: "\(prefix)_hifigan.npy", shape: [1, result.waveform.count],
+                                dtype: "float32", axes: ["batch", "sample"],
+                                description: "PyTorch 版 Decoder の出力メル（thesis_pytorch_postnet_<name>.npy）を入れた"
+                                    + " HiFi-GAN の出力の先頭 256T′ サンプル（デエンファシス前）",
+                                sha256: values["hifigan_wave_sha256"]
+                            ))
+                        }
+                        if !deemph.isEmpty {
+                            try recorder.writeNpy(deemph, rows: 1, cols: deemph.count, fileName: "\(prefix)_deemph.npy")
+                            entries.append(.init(
+                                key: "deemph", fileName: "\(prefix)_deemph.npy", shape: [1, deemph.count],
+                                dtype: "float32", axes: ["batch", "sample"],
+                                description: "デエンファシス後、16 ビットへの変換前の波形", sha256: values["deemph_wave_sha256"]
+                            ))
+                        }
+                        try appendWav(deemph, prefix: prefix, to: &entries)
+                        let input = ThesisRunMetadata.InputEntry(
+                            name: name, file: "thesis_pytorch_postnet_\(name).npy",
+                            totalFrames: info.T, effectiveFrames: info.T_prime
+                        )
+                        try recorder.writeJSON(
+                            ThesisRunMetadata.build(config: config, values: values, input: input, models: models, arrays: entries),
+                            fileName: "\(prefix)_meta.json"
+                        )
+                    }
                 } catch {
                     values["thermal_after"] = ThesisRecorder.thermalState
                     values["status"] = "failed"

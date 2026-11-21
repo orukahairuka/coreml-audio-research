@@ -26,6 +26,12 @@ load は条件ごとに「インストールし直してから起動」を 3 回
       --conditions Float16:cpuAndNE,Float16:cpuAndNE:cpuAndGPU,Float16:cpuAndNE:cpuOnly,Float16:cpuOnly
   # 修正前と修正後の前処理の比較（モデルは使わないが、条件の指定は 1 つ必要）
   scripts/run_thesis_bench.py --device "iPhone (3)" --phases preprocess --conditions Float16:cpuOnly
+  # 他の環境の出力と比べるための保存（infer は実行ごとに npy・wav・<prefix>_meta.json を残す。
+  # 読み込みは scripts/load_eval_outputs.py）
+  scripts/run_thesis_bench.py --device "iPhone (3)" --phases infer --inputs 1,6,2,11 \\
+      --conditions Float16:cpuAndNE,Float16:cpuAndNE:cpuOnly,Float16:cpuOnly
+  # 速度だけを測り、配列を残さない
+  scripts/run_thesis_bench.py --device "iPhone (3)" --phases infer --no-save-arrays
   # シミュレータでスクリプトの動作確認
   scripts/run_thesis_bench.py --simulator <UDID> --phases infer --conditions Float32:cpuOnly --inputs 1
 """
@@ -288,6 +294,8 @@ class Bench:
             env["CMLA_THESIS_STEP_STATS"] = "1"
         if self.args.decoder_input_write:
             env["CMLA_THESIS_DECODER_INPUT_WRITE"] = self.args.decoder_input_write
+        if self.args.no_save_arrays:
+            env["CMLA_THESIS_SAVE_ARRAYS"] = "0"
         if mode == "optab":
             env["CMLA_THESIS_OPT_A"] = self.args.opt_a
             env["CMLA_THESIS_OPT_B"] = self.args.opt_b
@@ -369,6 +377,9 @@ def main() -> int:
                         help="Decoder 入力の書き込み方法（既定はアプリの既定の bulk。element は ch4-v3 までの方法）")
     parser.add_argument("--step-stats", action="store_true",
                         help="Decoder のステップごとの詳細統計を取る（調査用。ch4-v2 までの計測と同じ処理になる）")
+    parser.add_argument("--no-save-arrays", action="store_true",
+                        help="infer / vocoder で実行ごとの npy・wav・meta.json を保存しない（CSV の行だけ書く）。"
+                             "既定は保存する。どちらでも保存は計測時間に含まれない")
     parser.add_argument("--opt-a", default="none", help="optab: 変更前の高速化の指定")
     parser.add_argument("--opt-b", default="none", help="optab: 変更後の高速化の指定")
     parser.add_argument("--preroll-sec", type=float, default=15, help="optab: 計測の前の空運転の秒数")

@@ -177,6 +177,13 @@ final class ThesisRecorder {
         try NpyWriter.writeFloat32(values, rows: rows, cols: cols, to: url)
     }
 
+    /// `runs/<launch>/` の下に JSON を書く（キーは並べ替える）
+    func writeJSON(_ object: [String: Any], fileName: String) throws {
+        let (url, _) = try runFileURL(fileName)
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: url)
+    }
+
     func writeWav(_ waveform: [Float], sampleRate: Double, fileName: String) throws {
         guard !waveform.isEmpty else { return }
         let (url, _) = try runFileURL(fileName)
