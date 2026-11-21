@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+# 評価の入力・結果・埋め込み（提供された音声は再配布しない）
+data/
+results/
+embeddings/
