@@ -227,6 +227,24 @@ struct AudioFeatureExtractorTests {
         #expect(result[mid] > 0)
     }
 
+    /// float32 の wav は AVAudioFile.read(into:) を 1 回呼ぶだけでは末尾まで読めないことがある。最後まで読めること
+    @Test func loadAudioReadsWholeFloat32Wav() throws {
+        let count = 188_023
+        let samples: [Float] = (0..<count).map({ 0.3 * sin(Float($0) * 0.013) })
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("float32_\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatLinearPCM), AVSampleRateKey: 22050.0, AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsBigEndianKey: false,
+        ]
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+            try file.write(from: try WavWriter.makeBuffer(waveform: samples, sampleRate: 22050))
+        }
+        let loaded = try AudioFeatureExtractor.loadAudio(from: url)
+        #expect(loaded == samples)
+    }
+
     /// np.linspace(1.0, 0.0, n) と同じく、フェードの先頭の係数は 1、末尾の係数は 0
     @Test func preprocessFadeOutMatchesLinspace() {
         let samples = [Float](repeating: 0.5, count: 1000)
