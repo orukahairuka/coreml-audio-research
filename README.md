@@ -71,7 +71,7 @@ unzip mlpackages.zip -d ios/CoreMLAudioApp/CoreMLAudioApp/MLModels/
 2. **実機で一括合成（FAD 用）**: `scripts/run_formal_eval.py` が入力を端末に送り、アプリを `CMLA_FORMAL_EVAL=1`（`FormalEvalRunner`）で起動して結果を取り出す
 3. **検証**: `scripts/verify_formal_session.py`（件数・長さ・NaN などを全件確認）、`scripts/compare_formal_to_pytorch.py`（PyTorch FP32 との比較）
 4. **FAD**: `eval/fad/run_formal_fadtk.py`（DCASE2024 Task7 版 fadtk、PANNs Wavegram-Logmel）。結果は `metrics/fad_official_fadtk/`
-5. **RTF**: `metrics/rtf_official/run_rtf_official.py` がアプリを `CMLA_RTF_BENCH=1`（`RTFBenchRunner`、Release ビルド）で起動する。結果は `metrics/rtf_official/`
+5. **RTF**: `scripts/rtf_official/run_rtf_official.py` がアプリを `CMLA_RTF_BENCH=1`（`RTFBenchRunner`、Release ビルド）で起動する。結果は `metrics/rtf_official/`。集計は `scripts/rtf_official/aggregate_rtf.py`、図4-1 は `scripts/rtf_official/make_thesis_figure.py`
 
 各スクリプトの使い方は、ファイル先頭の docstring に書いてある。結果の数値は `metrics/` 以下の各 README を参照。
 
