@@ -13,8 +13,6 @@
 | `convert_hifigan.py` | HiFi-GAN を .mlpackage 化（float16/32/int8 × shape 4モード） | in: HiFiGAN chkpt / out: `HiFiGAN_Generator_*.mlpackage` |
 | `synthesis_coreml.py` | 変換後の通し合成 + PyTorch版と比較 | in: input.wav / out: `result/*_coreml_*.wav` |
 
-`/convert` skill が `convert_transformer.py` / `convert_hifigan.py` を呼ぶ。
-
 ## ② 実機計測の制御（shell）
 
 | スクリプト | 役割 |
