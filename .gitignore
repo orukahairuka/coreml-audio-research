@@ -19,6 +19,14 @@ data/*/hifigan_reference/
 data/*/pytorch_reference/
 # 卒論第4章の入力（ASJ152 デモからダウンロードする。再配布しない）
 data/thesis_ch4/inputs/
+# PronounSE の開発者から提供された評価データセット（再配布しない）。置き場所によらず除外する。
+# 合成音は PronounSE/<話者>/ にあるが、PronounSE はサブモジュールと同じ名前なので話者フォルダだけを除外する
+Trimmed_Explosion/
+Vocal_Mimicry/
+**/PronounSE/[fm]-[0-9][0-9]/
+Trimmed_Explosion.zip
+Vocal_Mimicry.zip
+PronounSE.zip
 
 # Generated investigation artifacts (regeneratable via scripts/compare_*.py)
 docs/**/plots/
@@ -39,3 +47,5 @@ exports/
 __pycache__/
 *.pyc
 *.aimodel/
+# 可変長の実機テストの入力（評価データセットの口真似音とそのメル。再配布しない）
+ios/CoreMLAudioApp/CoreMLAudioAppTests/VariableLengthInputs/

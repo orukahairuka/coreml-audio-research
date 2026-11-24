@@ -227,6 +227,51 @@ struct AudioFeatureExtractorTests {
         #expect(result[mid] > 0)
     }
 
+    // MARK: - 正式評価の前処理（fullInput）
+
+    /// 前に無音がある入力: 既定（trimAndFade）は削って短くなり、fullInput は全体を使って 1 + floor(N / 256) フレームになる
+    @Test func fullInputKeepsLeadingSilenceAndFrameCount() {
+        let count = 22050
+        var samples = [Float](repeating: 0, count: count)
+        for i in (count / 2)..<count {
+            samples[i] = 0.5 * sin(Float(i) * 2 * .pi * 440 / 22050)
+        }
+        let full = AudioFeatureExtractor.extractMelSpectrogram(fromSamples: samples, waveformPreprocess: .fullInput)
+        let trimmed = AudioFeatureExtractor.extractMelSpectrogram(fromSamples: samples)
+        #expect(full.frameCount == 1 + count / AudioFeatureExtractor.hopLength)
+        #expect(trimmed.frameCount < full.frameCount)
+    }
+
+    /// fullInput はフェードもしない: 前処理を飛ばしてプリエンファシスから計算したメルと一致する
+    @Test func fullInputSkipsFadeOut() {
+        let samples = [Float](repeating: 0.5, count: 4096)
+        let full = AudioFeatureExtractor.extractMelSpectrogram(fromSamples: samples, waveformPreprocess: .fullInput)
+        let manual = AudioFeatureExtractor.normalizeToDB(AudioFeatureExtractor.applyMelFilterbankSparse(
+            AudioFeatureExtractor.stft(AudioFeatureExtractor.applyPreemphasis(samples))
+        ))
+        #expect(full.mel == manual)
+        let faded = AudioFeatureExtractor.extractMelSpectrogram(fromSamples: samples, waveformPreprocess: .trimAndFade)
+        #expect(faded.mel != full.mel)
+    }
+
+    /// float32 の wav は AVAudioFile.read(into:) を 1 回呼ぶだけでは末尾まで読めないことがある。最後まで読めること
+    @Test func loadAudioReadsWholeFloat32Wav() throws {
+        let count = 188_023
+        let samples: [Float] = (0..<count).map({ 0.3 * sin(Float($0) * 0.013) })
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("float32_\(UUID().uuidString).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let settings: [String: Any] = [
+            AVFormatIDKey: Int(kAudioFormatLinearPCM), AVSampleRateKey: 22050.0, AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 32, AVLinearPCMIsFloatKey: true, AVLinearPCMIsBigEndianKey: false,
+        ]
+        do {
+            let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+            try file.write(from: try WavWriter.makeBuffer(waveform: samples, sampleRate: 22050))
+        }
+        let loaded = try AudioFeatureExtractor.loadAudio(from: url)
+        #expect(loaded == samples)
+    }
+
     /// np.linspace(1.0, 0.0, n) と同じく、フェードの先頭の係数は 1、末尾の係数は 0
     @Test func preprocessFadeOutMatchesLinspace() {
         let samples = [Float](repeating: 0.5, count: 1000)

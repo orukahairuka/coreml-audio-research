@@ -77,6 +77,59 @@ struct ThesisBenchTests {
         }
     }
 
+    // MARK: - 評価用の配列の保存
+
+    @Test func configSavesArraysByDefaultAndCanTurnOff() throws {
+        let base = ["CMLA_THESIS_BENCH": "infer", "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuAndNE"]
+        #expect(try ThesisBenchConfig.fromEnvironment(base).saveArrays)
+        #expect(try ThesisBenchConfig.fromEnvironment(base.merging(["CMLA_THESIS_SAVE_ARRAYS": "1"]) { $1 }).saveArrays)
+        #expect(try ThesisBenchConfig.fromEnvironment(base.merging(["CMLA_THESIS_SAVE_ARRAYS": "0"]) { $1 }).saveArrays == false)
+        #expect(throws: ThesisBenchConfig.ConfigError.self) {
+            _ = try ThesisBenchConfig.fromEnvironment(base.merging(["CMLA_THESIS_SAVE_ARRAYS": "no"]) { $1 })
+        }
+    }
+
+    @Test func runMetadataRecordsConditionsAndArrays() throws {
+        let config = try ThesisBenchConfig.fromEnvironment([
+            "CMLA_THESIS_BENCH": "infer", "CMLA_THESIS_SESSION": "s1", "CMLA_THESIS_LAUNCH": "L001",
+            "CMLA_THESIS_PRECISION": "Float16", "CMLA_THESIS_CU": "cpuAndNE", "CMLA_THESIS_CU_HIFI": "cpuOnly",
+        ])
+        let values = [
+            "run_index": "2", "phase": "steady", "status": "success", "synth_ms": "712.5", "rtf": "0.23",
+        ]
+        let arrays = [
+            ThesisRunMetadata.ArrayEntry(
+                key: "decoder_mel", fileName: "p_decoder_mel.npy", shape: [189, 256], dtype: "float32",
+                axes: ["frame", "mel"], description: "d", sha256: "abc"
+            ),
+        ]
+        let meta = ThesisRunMetadata.build(
+            config: config, values: values,
+            input: .init(name: "11", file: "thesis_src_11.wav", totalFrames: 189, effectiveFrames: 189),
+            models: [:], arrays: arrays
+        )
+        // JSON に書けて、Python 側が読むキーが入っていること
+        let data = try JSONSerialization.data(withJSONObject: meta, options: [.sortedKeys])
+        let decoded = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(decoded["precision"] as? String == "Float16")
+        let units = try #require(decoded["compute_units"] as? [String: String])
+        #expect(units == ["encoder": "cpuAndNE", "decoder": "cpuAndNE", "hifigan": "cpuOnly"])
+        let audio = try #require(decoded["audio"] as? [String: Any])
+        #expect(audio["sample_rate"] as? Int == 22050)
+        let input = try #require(decoded["input"] as? [String: Any])
+        #expect(input["T_prime"] as? Int == 189)
+        #expect(input["zero_padded_frames"] as? Int == 262 - 189)
+        #expect(input["truncated_frames"] as? Int == 0)
+        let run = try #require(decoded["run"] as? [String: Any])
+        #expect(run["run_index"] as? Int == 2)
+        let timing = try #require(decoded["timing_ms"] as? [String: Double])
+        #expect(timing["synth_ms"] == 712.5)
+        let mel = try #require((decoded["arrays"] as? [String: Any])?["decoder_mel"] as? [String: Any])
+        #expect(mel["shape"] as? [Int] == [189, 256])
+        #expect(mel["dtype"] as? String == "float32")
+        #expect(mel["format"] as? String == "npy")
+    }
+
     // MARK: - StageProfiler
 
     @Test func profilerLapsPartitionTheSpan() {

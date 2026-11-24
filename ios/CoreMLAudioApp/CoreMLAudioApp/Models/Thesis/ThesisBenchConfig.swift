@@ -22,6 +22,8 @@ import Foundation
 /// | `CMLA_THESIS_PROFILE` | 省略可。`1` で infer の End-to-End を処理別に計測し `infer_stages.csv` に出す |
 /// | `CMLA_THESIS_DECODER_INPUT_WRITE` | 省略可。Decoder 入力の書き込み方法 `bulk`（既定）/ `element`（ch4-v3 までの方法。比較用） |
 /// | `CMLA_THESIS_STEP_STATS` | 省略可。`1` で Decoder のステップごとの詳細統計を取る（調査用。ch4-v2 までは常に取っていた）。既定は取らない |
+/// | `CMLA_THESIS_SAVE_ARRAYS` | 省略可。infer / vocoder で実行ごとの配列（npy・wav）と `<prefix>_meta.json` を保存するか。|
+/// |  | `1`（既定。従来どおり保存する）/ `0`（CSV の行だけ書く）。どちらでも保存は計測時間に含まれない |
 struct ThesisBenchConfig {
 
     enum Mode: String {
@@ -59,6 +61,8 @@ struct ThesisBenchConfig {
     let decoderStepStats: Bool
     /// Decoder 入力の書き込み方法
     let decoderInputWrite: DecoderInputWrite
+    /// infer / vocoder で実行ごとの配列（npy・wav）と meta.json を保存するか
+    var saveArrays: Bool = true
 
     /// 計測コードの版。CSV の `bench_version` 列に出し、追加計測より前の結果（列が無い）と区別する
     /// ch4-v2: 混合 Compute Units・処理別計測を追加（Decoder のステップごとの統計は常に取っていた）
@@ -116,6 +120,11 @@ struct ThesisBenchConfig {
             }
             decoderInputWrite = method
         }
+        var saveArrays = true
+        if let raw = env["CMLA_THESIS_SAVE_ARRAYS"] {
+            guard raw == "0" || raw == "1" else { throw ConfigError.invalid("CMLA_THESIS_SAVE_ARRAYS", raw) }
+            saveArrays = raw == "1"
+        }
 
         func intValue(_ key: String, default value: Int) throws -> Int {
             guard let raw = env[key] else { return value }
@@ -138,7 +147,8 @@ struct ThesisBenchConfig {
             hifiganComputeUnitOverride: hifiganComputeUnit,
             profileEnabled: profileEnabled,
             decoderStepStats: decoderStepStats,
-            decoderInputWrite: decoderInputWrite
+            decoderInputWrite: decoderInputWrite,
+            saveArrays: saveArrays
         )
     }
 
