@@ -24,7 +24,7 @@ PronounSE/            # 元リポジトリ（git submodule）
 | Transformer Decoder | 特徴量→変換後のメルスペクトログラム（自己回帰で T 回まわす） |
 | HiFi-GAN Generator | メルスペクトログラム→波形（ボコーダー） |
 
-変換は `scripts/convert_transformer.py`・`scripts/convert_hifigan.py`（`/convert` skill から呼べる）。
+変換は `scripts/convert_transformer.py`・`scripts/convert_hifigan.py`。
 CoreML の後継の Core AI（`.aimodel`）への変換も `scripts/convert_*_coreai.py` で試している。
 
 ## モデルファイル
