@@ -24,21 +24,36 @@ struct AudioFeatureExtractor {
     /// フェードアウトする割合。末尾 15% の区間で音量を下げる
     static let fadeOutRatio: Double = 0.15
 
+    /// メルを作る前の波形の前処理
+    enum WaveformPreprocess: String {
+        /// 公開実装の get_spectrograms と同じく、先頭の無音を削り、末尾 15% をフェードアウトする（既定。従来の動作）
+        case trimAndFade
+        /// 入力の全体をそのまま使う（削らず、フェードしない）。
+        /// 開発者が提供したオリジナルの合成音はこの条件で作られている（`scripts/identify_original_preprocess.py`）。
+        /// 正式評価（FAD・RTF）ではこちらを使う。フレーム数は 1 + floor(サンプル数 / 256) になる
+        case fullInput
+    }
+
     /// wav ファイルからメルスペクトログラムを抽出する
     /// - Returns: (mel: [T, nMels], frameCount: Int)
     static func extractMelSpectrogram(
-        from url: URL, optimizations: SynthesisOptimizations = .adopted
+        from url: URL, optimizations: SynthesisOptimizations = .adopted,
+        waveformPreprocess: WaveformPreprocess = .trimAndFade
     ) throws -> (mel: [Float], frameCount: Int) {
-        extractMelSpectrogram(fromSamples: try loadAudio(from: url), optimizations: optimizations)
+        extractMelSpectrogram(
+            fromSamples: try loadAudio(from: url), optimizations: optimizations, waveformPreprocess: waveformPreprocess
+        )
     }
 
     /// 読み込み済み（22050 Hz・モノラル）の波形からメルスペクトログラムを抽出する
     /// - Returns: (mel: [T, nMels], frameCount: Int)
     /// - Parameter optimizations: 高速化の指定（結果は変わらない）
+    /// - Parameter waveformPreprocess: メルを作る前の波形の前処理（既定は従来どおり `.trimAndFade`）
     static func extractMelSpectrogram(
-        fromSamples samples: [Float], optimizations: SynthesisOptimizations = .adopted
+        fromSamples samples: [Float], optimizations: SynthesisOptimizations = .adopted,
+        waveformPreprocess: WaveformPreprocess = .trimAndFade
     ) -> (mel: [Float], frameCount: Int) {
-        let preprocessed = preprocess(samples)
+        let preprocessed = waveformPreprocess == .trimAndFade ? preprocess(samples) : samples
         let emphasized = applyPreemphasis(preprocessed)
         let magnitude = stft(emphasized)
         let melSpec = optimizations.contains(.sparseMelFilterbank)
